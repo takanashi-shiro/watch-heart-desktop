@@ -5,11 +5,13 @@ const temperature = document.querySelector('#overlay-temperature');
 const weatherLabel = document.querySelector('#overlay-weather-label');
 const lyricElement = document.querySelector('#overlay-lyric');
 const lockButton = document.querySelector('#overlay-lock');
+const heartOnlyButton = document.querySelector('#overlay-heart-only');
 const controlsElement = document.querySelector('.overlay-controls');
 const zoneClasses = ['zone-low', 'zone-normal', 'zone-warm', 'zone-high', 'zone-danger'];
 let mediaState;
 let sodaLyric;
 let passthroughEnabled = false;
+let heartOnlyEnabled = false;
 let controlsInteractive = false;
 let displayedLyric = '';
 let sodaDirectEnabled = false;
@@ -40,13 +42,15 @@ function hexToRgb(hex) {
 function applyTheme(theme = {}) {
   const merged = { ...DEFAULT_THEME, ...theme };
   const [r, g, b] = hexToRgb(merged.background);
-  const alpha = Math.min(1, Math.max(0.35, Number(merged.opacity) / 100));
+  const alpha = Math.min(1, Math.max(0, Number(merged.opacity) / 100));
+  document.body.classList.toggle('transparent-background', alpha === 0);
   const root = document.documentElement.style;
   root.setProperty('--overlay-accent', merged.accent);
   root.setProperty('--overlay-bg', `rgba(${r}, ${g}, ${b}, ${alpha})`);
+  root.setProperty('--overlay-opacity', String(alpha));
   root.setProperty('--overlay-text', merged.text);
   root.setProperty('--overlay-lyric', merged.lyric);
-  root.setProperty('--overlay-blur', `${Number(merged.blur) || 0}px`);
+  root.setProperty('--overlay-blur', `${(Number(merged.blur) || 0) * alpha}px`);
   root.setProperty('--overlay-radius', `${Number(merged.radius) || 18}px`);
   root.setProperty('--overlay-font-scale', `${Number(merged.fontScale) || 100}%`);
 }
@@ -157,6 +161,11 @@ window.overlay.onState((state) => {
 });
 
 window.overlay.onSettings((settings) => {
+  heartOnlyEnabled = Boolean(settings.heartOnly);
+  document.body.classList.toggle('heart-only', heartOnlyEnabled);
+  heartOnlyButton.classList.toggle('active', heartOnlyEnabled);
+  heartOnlyButton.setAttribute('aria-pressed', String(heartOnlyEnabled));
+  heartOnlyButton.title = heartOnlyEnabled ? '显示全部内容' : '仅显示心率';
   passthroughEnabled = settings.passthrough;
   if (!passthroughEnabled) controlsInteractive = false;
   lockButton.classList.toggle('active', settings.passthrough);
@@ -175,6 +184,9 @@ document.querySelector('#overlay-smaller').addEventListener('click', () => {
 });
 document.querySelector('#overlay-larger').addEventListener('click', () => {
   window.overlay.resizeStep(1);
+});
+heartOnlyButton.addEventListener('click', () => {
+  window.overlay.setHeartOnly(!heartOnlyEnabled);
 });
 lockButton.addEventListener('click', () => {
   window.overlay.setPassthrough(!passthroughEnabled);

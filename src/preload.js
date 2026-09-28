@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('desktop', {
   setOverlayScale: (scale) => ipcRenderer.send('overlay-scale', scale),
   setOverlayWidth: (width) => ipcRenderer.send('overlay-width', width),
   setOverlayTheme: (theme) => ipcRenderer.send('overlay-theme', theme),
+  setOverlayHeartOnly: (enabled) => ipcRenderer.send('overlay-heart-only', enabled),
   setOverlayPassthrough: (enabled) => ipcRenderer.send('overlay-passthrough', enabled),
   updateHeartRate: (state) => ipcRenderer.send('heart-rate-update', state),
   updateWeather: (weather) => ipcRenderer.send('weather-update', weather),

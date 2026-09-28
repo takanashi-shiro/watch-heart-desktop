@@ -3,6 +3,7 @@
   font-family: "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
   --overlay-accent: #ff315d;
   --overlay-bg: rgba(10, 12, 18, 0.88);
+  --overlay-opacity: 0.88;
   --overlay-text: #f7f8fb;
   --overlay-lyric: #e8eaf0;
   --overlay-blur: 16px;
@@ -36,10 +37,10 @@ button {
   align-items: center;
   gap: 13px;
   padding: 10px 12px 10px 15px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, calc(0.12 * var(--overlay-opacity)));
   border-radius: var(--overlay-radius);
   background: var(--overlay-bg);
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, calc(0.4 * var(--overlay-opacity)));
   color: var(--overlay-text);
   font-size: var(--overlay-font-scale);
   backdrop-filter: blur(var(--overlay-blur));
@@ -57,6 +58,12 @@ button {
 .heart-section {
   min-width: 112px;
   gap: 6px;
+}
+
+.heart-only .weather-section,
+.heart-only .lyric-section,
+.heart-only .divider {
+  display: none;
 }
 
 .heart {
@@ -94,7 +101,7 @@ button {
 .divider {
   width: 1px;
   height: 32px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, calc(0.1 * var(--overlay-opacity)));
 }
 
 .weather-section {
@@ -174,12 +181,12 @@ button {
 }
 
 .overlay-controls button:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, calc(0.09 * var(--overlay-opacity)));
   color: white;
 }
 
 #overlay-lock.active {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, calc(0.12 * var(--overlay-opacity)));
   color: var(--overlay-accent);
 }
 
@@ -203,19 +210,19 @@ button {
 
 .game-mode.zone-danger .overlay-bar {
   animation: none;
-  box-shadow: 0 0 18px rgba(255, 35, 35, 0.38);
+  box-shadow: 0 0 18px rgba(255, 35, 35, calc(0.38 * var(--overlay-opacity)));
 }
 
 body.zone-low .overlay-bar {
-  border-color: rgba(97, 168, 255, 0.32);
+  border-color: rgba(97, 168, 255, calc(0.32 * var(--overlay-opacity)));
 }
 
 body.zone-normal .overlay-bar {
-  border-color: rgba(67, 209, 123, 0.32);
+  border-color: rgba(67, 209, 123, calc(0.32 * var(--overlay-opacity)));
 }
 
 body.zone-warm .overlay-bar {
-  border-color: rgba(255, 176, 46, 0.48);
+  border-color: rgba(255, 176, 46, calc(0.48 * var(--overlay-opacity)));
 }
 
 body.zone-warm .heart,
@@ -224,8 +231,8 @@ body.zone-warm .weather-icon {
 }
 
 body.zone-high .overlay-bar {
-  border-color: rgba(255, 49, 93, 0.62);
-  background: rgba(42, 9, 18, 0.9);
+  border-color: rgba(255, 49, 93, calc(0.62 * var(--overlay-opacity)));
+  background: rgba(42, 9, 18, var(--overlay-opacity));
 }
 
 body.zone-high .heart,
@@ -234,8 +241,8 @@ body.zone-high .weather-icon {
 }
 
 body.zone-danger .overlay-bar {
-  border-color: rgba(255, 35, 35, 0.9);
-  background: rgba(70, 0, 0, 0.94);
+  border-color: rgba(255, 35, 35, calc(0.9 * var(--overlay-opacity)));
+  background: rgba(70, 0, 0, var(--overlay-opacity));
   animation: danger-pulse 0.8s ease-in-out infinite;
 }
 
@@ -246,15 +253,14 @@ body.zone-danger #overlay-bpm {
 }
 
 @keyframes danger-pulse {
-  0%, 100% { box-shadow: 0 0 18px rgba(255, 35, 35, 0.24); }
-  50% { box-shadow: 0 0 34px rgba(255, 35, 35, 0.62); }
+  0%, 100% { box-shadow: 0 0 18px rgba(255, 35, 35, calc(0.24 * var(--overlay-opacity))); }
+  50% { box-shadow: 0 0 34px rgba(255, 35, 35, calc(0.62 * var(--overlay-opacity))); }
 }
 
 @media (max-width: 480px) {
   .overlay-bar {
     gap: 8px;
     padding: 8px 10px;
-    border-radius: 15px;
   }
 
   .heart-section {
@@ -299,7 +305,7 @@ body.zone-danger #overlay-bpm {
     right: 5px;
     padding: 2px;
     border-radius: 9px;
-    background: rgba(10, 12, 18, 0.92);
+    background: transparent;
   }
 
   .overlay-controls button {
@@ -310,4 +316,86 @@ body.zone-danger #overlay-bpm {
   .lyric-section {
     padding-right: 23px;
   }
+}
+
+.heart-only .overlay-controls {
+  position: static;
+  background: transparent;
+}
+
+.heart-only #overlay-bpm {
+  font-size: 32px;
+  line-height: 1;
+}
+
+@media (max-width: 160px) {
+  .overlay-bar {
+    justify-content: center;
+    gap: 0;
+    padding: 4px;
+  }
+
+  .heart-section {
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .heart,
+  .unit,
+  .weather-section,
+  .lyric-section,
+  .divider,
+  .overlay-controls {
+    display: none;
+  }
+
+  #overlay-bpm {
+    min-width: 0;
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 240px) {
+  .heart-only .overlay-bar {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0;
+    padding: 3px;
+  }
+
+  .heart-only .heart-section {
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .heart-only #overlay-bpm {
+    font-size: clamp(24px, 22vw, 48px);
+  }
+
+  .heart-only .overlay-controls {
+    display: flex;
+    position: static;
+    order: -1;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  .heart-only .overlay-controls button {
+    flex: 0 0 20px;
+    height: 18px;
+  }
+}
+
+body.transparent-background .overlay-bar {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  animation: none;
 }

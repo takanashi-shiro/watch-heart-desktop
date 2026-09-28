@@ -46,6 +46,10 @@
           <input id="overlay-visible" type="checkbox">
           <span>显示</span>
         </label>
+        <label class="switch-control">
+          <input id="overlay-heart-only" type="checkbox">
+          <span>仅显示心率</span>
+        </label>
         <label class="range-control">
           <span>缩放</span>
           <input id="overlay-size" type="range" min="50" max="200" value="100">
@@ -53,7 +57,7 @@
         </label>
         <label class="range-control">
           <span>宽度</span>
-          <input id="overlay-width" type="range" min="360" max="1000" step="20" value="580">
+          <input id="overlay-width" type="range" min="50" max="1000" step="10" value="580">
           <output id="overlay-width-value">580</output>
         </label>
         <label class="switch-control">
@@ -110,7 +114,7 @@
           <label><span>背景</span><input id="theme-background" type="color" value="#0a0c12"></label>
           <label><span>文字</span><input id="theme-text" type="color" value="#f7f8fb"></label>
           <label><span>歌词</span><input id="theme-lyric" type="color" value="#e8eaf0"></label>
-          <label class="range-control"><span>透明度</span><input id="theme-opacity" type="range" min="35" max="100" value="88"><output id="theme-opacity-value">88%</output></label>
+          <label class="range-control"><span>透明度</span><input id="theme-opacity" type="range" min="0" max="100" value="88"><output id="theme-opacity-value">88%</output></label>
           <label class="range-control"><span>圆角</span><input id="theme-radius" type="range" min="8" max="30" value="18"><output id="theme-radius-value">18</output></label>
           <label class="range-control"><span>字体</span><input id="theme-font-scale" type="range" min="80" max="130" value="100"><output id="theme-font-scale-value">100%</output></label>
         </div>

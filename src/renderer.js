@@ -28,6 +28,7 @@ const elements = {
 
 const overlayControls = {
   visible: document.querySelector('#overlay-visible'),
+  heartOnly: document.querySelector('#overlay-heart-only'),
   size: document.querySelector('#overlay-size'),
   sizeValue: document.querySelector('#overlay-size-value'),
   width: document.querySelector('#overlay-width'),
@@ -733,6 +734,9 @@ elements.installUpdate.addEventListener('click', () => {
   renderUpdateStatus({ state: 'installing', message: '正在重启安装更新…' });
   window.desktop.installUpdate();
 });
+overlayControls.heartOnly.addEventListener('change', (event) => {
+  window.desktop.setOverlayHeartOnly(event.target.checked);
+});
 overlayControls.visible.addEventListener('change', (event) => {
   window.desktop.setOverlayVisible(event.target.checked);
 });
@@ -864,6 +868,7 @@ window.desktop.onOverlaySettings((settings) => {
   const wasLowResourceMode = lowResourceMode;
   lowResourceMode = settings.gameMode;
   overlayControls.visible.checked = settings.visible;
+  overlayControls.heartOnly.checked = Boolean(settings.heartOnly);
   overlayControls.passthrough.checked = settings.passthrough;
   overlayControls.size.value = String(Math.round(settings.scale * 100));
   overlayControls.sizeValue.textContent = `${Math.round(settings.scale * 100)}%`;

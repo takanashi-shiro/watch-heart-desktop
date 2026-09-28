@@ -1,14 +1,14 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; style-src 'self'; script-src 'self'"
-    >
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Watch Heart Overlay</title>
-    <link rel="stylesheet" href="./overlay.css">
+    <link rel="stylesheet" href="./overlay.css" />
   </head>
   <body>
     <main class="overlay-bar">
@@ -35,6 +35,7 @@
       </section>
 
       <nav class="overlay-controls">
+        <button id="overlay-heart-only" title="仅显示心率" aria-label="仅显示心率" aria-pressed="false">♥</button>
         <button id="overlay-smaller" title="缩小">−</button>
         <button id="overlay-larger" title="放大">＋</button>
         <button id="overlay-lock" title="鼠标穿透">◇</button>

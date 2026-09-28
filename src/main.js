@@ -48,6 +48,7 @@ let discoveredDevices = new Map();
 let isQuitting = false;
 let overlayScale = 1;
 let overlayWidth = 580;
+let overlayHeartOnly = false;
 let overlayPassthrough = false;
 let overlayPosition;
 let settingsSaveTimer;
@@ -65,7 +66,7 @@ let gameService;
 let applyingGameProfile = false;
 const OVERLAY_MIN_SCALE = 0.5;
 const OVERLAY_MAX_SCALE = 2;
-const OVERLAY_MIN_WIDTH = 360;
+const OVERLAY_MIN_WIDTH = 50;
 const OVERLAY_MAX_WIDTH = 1000;
 const OVERLAY_BASE_HEIGHT = 96;
 const OVERLAY_THEMES = new Set([
@@ -95,6 +96,7 @@ function overlayProfile() {
   return {
     scale: overlayScale,
     width: overlayWidth,
+    heartOnly: overlayHeartOnly,
     x: bounds?.x ?? overlayPosition?.x,
     y: bounds?.y ?? overlayPosition?.y,
     theme: overlayTheme,
@@ -112,6 +114,7 @@ function applyGameProfile(profile) {
   applyingGameProfile = true;
   setOverlayScale(profile.scale);
   setOverlayWidth(profile.width);
+  setOverlayHeartOnly(profile.heartOnly);
   setOverlayTheme(profile.theme);
   setGameMode(profile.gameMode);
   setOverlayPassthrough(profile.passthrough);
@@ -157,7 +160,7 @@ function normalizeOverlayTheme(theme) {
     background: sanitizeHexColor(theme?.background, defaults.background),
     text: sanitizeHexColor(theme?.text, defaults.text),
     lyric: sanitizeHexColor(theme?.lyric, defaults.lyric),
-    opacity: clampNumber(theme?.opacity, 35, 100, defaults.opacity),
+    opacity: clampNumber(theme?.opacity, 0, 100, defaults.opacity),
     blur: clampNumber(theme?.blur, 0, 28, defaults.blur),
     radius: clampNumber(theme?.radius, 8, 30, defaults.radius),
     fontScale: clampNumber(theme?.fontScale, 80, 130, defaults.fontScale)
@@ -185,6 +188,7 @@ function loadOverlaySettings() {
       if (visible) overlayPosition = { x: saved.x, y: saved.y };
     }
     overlayTheme = normalizeOverlayTheme(saved.theme);
+    overlayHeartOnly = Boolean(saved.heartOnly);
     if (LYRICS_MODES.has(saved.lyricsMode)) lyricsMode = saved.lyricsMode;
   } catch {
     // First launch or invalid settings: use safe defaults.
@@ -198,6 +202,7 @@ function saveOverlaySettings() {
     const data = {
       scale: overlayScale,
       width: overlayWidth,
+      heartOnly: overlayHeartOnly,
       x: bounds?.x,
       y: bounds?.y,
       theme: overlayTheme,
@@ -540,6 +545,7 @@ function sendOverlaySettings() {
   const settings = {
     visible: Boolean(overlayWindow?.isVisible()),
     passthrough: overlayPassthrough,
+    heartOnly: overlayHeartOnly,
     scale: overlayScale,
     width: overlayWidth,
     unlockShortcuts,
@@ -575,7 +581,7 @@ function createOverlayWindow() {
   if (overlayWindow && !overlayWindow.isDestroyed()) return overlayWindow;
 
   overlayWindow = new BrowserWindow({
-    width: Math.round(overlayWidth * overlayScale),
+    width: Math.round((overlayHeartOnly ? Math.min(280, overlayWidth) : overlayWidth) * overlayScale),
     height: Math.round(OVERLAY_BASE_HEIGHT * overlayScale),
     minWidth: Math.round(OVERLAY_MIN_WIDTH * OVERLAY_MIN_SCALE),
     minHeight: Math.round(OVERLAY_BASE_HEIGHT * OVERLAY_MIN_SCALE),
@@ -684,6 +690,16 @@ function setOverlayWidth(width) {
   saveActiveGameProfile();
 }
 
+function setOverlayHeartOnly(enabled) {
+  overlayHeartOnly = Boolean(enabled);
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    resizeOverlayWindow(overlayWindow);
+  }
+  saveOverlaySettings();
+  sendOverlaySettings();
+  saveActiveGameProfile();
+}
+
 function setOverlayTheme(theme) {
   overlayTheme = normalizeOverlayTheme({ ...overlayTheme, ...(theme || {}) });
   saveOverlaySettings();
@@ -707,7 +723,7 @@ function setLyricsMode(mode) {
 
 function resizeOverlayWindow(window) {
   const current = window.getBounds();
-  const width = Math.round(overlayWidth * overlayScale);
+  const width = Math.round((overlayHeartOnly ? Math.min(280, overlayWidth) : overlayWidth) * overlayScale);
   const height = Math.round(OVERLAY_BASE_HEIGHT * overlayScale);
   const display = screen.getDisplayMatching(current);
   const area = display.workArea;
@@ -871,6 +887,11 @@ app.whenReady().then(async () => {
   ipcMain.on('overlay-theme', (event, theme) => {
     if (!isMainSender(event)) return;
     setOverlayTheme(theme);
+  });
+
+  ipcMain.on('overlay-heart-only', (event, enabled) => {
+    if (!isMainSender(event) && !isOverlaySender(event)) return;
+    setOverlayHeartOnly(enabled);
   });
 
   ipcMain.on('overlay-resize-step', (event, step) => {
