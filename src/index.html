@@ -17,7 +17,7 @@
           <span class="brand-mark">♥</span>
           <div>
             <strong>Watch Heart</strong>
-            <span>Apple Watch 心率接收器</span>
+            <span>通用蓝牙心率接收器</span>
           </div>
         </div>
         <div class="topbar-controls">
@@ -36,6 +36,23 @@
           </label>
         </div>
       </header>
+
+      <section class="theme-card remote-panel">
+        <h2>多用户心率</h2>
+        <form id="remote-connect-form" class="remote-connect-form">
+          <input id="remote-address" placeholder="IPv4 / IPv6，例如 192.168.1.20 或 2001:db8::1" aria-label="远程 IPv4 或 IPv6 地址" required maxlength="100">
+          <input id="remote-name" placeholder="用户名（可选）" aria-label="新用户名称" maxlength="40">
+          <button id="remote-connect" type="submit" class="primary-button">连接并添加用户</button>
+        </form>
+        <label class="switch-control">
+          <input id="remote-sharing" type="checkbox">
+          <span>共享本机心率（IPv4 / IPv6，TCP 32123；仅限可信网络，能访问端口的设备均可读取）</span>
+        </label>
+        <p>对方需运行支持远程功能的本程序并开启共享。IPv6 可直接输入，指定端口请用 [IPv6]:端口。勾选要显示的用户，主界面与悬浮窗同步；用户名可直接修改。共享每次启动默认关闭。</p>
+        <p id="remote-message" role="status" aria-live="polite"></p>
+        <div id="remote-user-list" class="remote-user-list"></div>
+        <div id="selected-heart-rates" class="selected-heart-rates" aria-label="选中用户的心率"></div>
+      </section>
 
       <section class="game-toolbar">
         <div>
@@ -133,6 +150,7 @@
             <span id="bpm-value">--</span>
             <span class="bpm-unit">BPM</span>
           </div>
+          <div id="local-user-name">本机</div>
           <div id="zone-pill" class="zone-pill zone-idle">等待心率</div>
 
           <div class="heart-zone-settings">
@@ -150,12 +168,16 @@
             <button id="connect-button" class="primary-button">扫描并连接</button>
             <button id="disconnect-button" class="secondary-button" disabled>断开</button>
           </div>
+          <label class="switch-control">
+            <input id="bluetooth-scan-all" type="checkbox">
+            <span>兼容扫描（显示全部蓝牙设备，仅在扫描不到时开启）</span>
+          </label>
         </article>
 
         <article class="chart-card">
           <div class="card-heading">
             <div>
-              <span class="eyebrow">实时趋势</span>
+              <span class="eyebrow">本机蓝牙实时趋势</span>
               <h2>最近 2 分钟</h2>
             </div>
             <div class="summary">
@@ -225,7 +247,7 @@
       </section>
 
       <footer>
-        请先在 Apple Watch 开始测量，并保持 iPhone“心率广播”运行。鼠标穿透后按 Ctrl+Shift+L 可恢复操作。天气已切换为中国大陆天气源。
+        请开启手表、心率带、臂带或手机 App 的标准 BLE 心率广播。鼠标穿透后按 Ctrl+Shift+L 可恢复操作。天气已切换为中国大陆天气源。
       </footer>
     </main>
 
@@ -233,7 +255,7 @@
       <div class="modal-panel">
         <div class="scanner-icon"><span></span></div>
         <h2>正在扫描心率设备</h2>
-        <p>请保持 iPhone 蓝牙广播开启，然后从下方选择设备。</p>
+        <p>请开启设备的蓝牙心率广播，再选择设备。兼容扫描会列出非心率设备，连接后仍需支持标准心率服务。</p>
         <div id="device-list" class="device-list">
           <div class="device-placeholder">正在搜索…</div>
         </div>
@@ -242,5 +264,6 @@
     </div>
 
     <script src="./renderer.js"></script>
+    <script src="./remote-users.js"></script>
   </body>
 </html>

@@ -128,6 +128,30 @@ function scheduleLyrics() {
 }
 
 function updateHeartRate(state) {
+  if (Array.isArray(state.users)) {
+    const usersElement = document.querySelector('#overlay-users');
+    usersElement.hidden = false;
+    document.querySelector('.heart-section').hidden = true;
+    const key = JSON.stringify(state.users.map(({ id, name, connected, bpm }) => ({ id, name, connected, bpm })));
+    if (usersElement.dataset.state !== key) {
+      usersElement.dataset.state = key;
+      usersElement.replaceChildren();
+      for (const user of state.users) {
+        const card = document.createElement('div');
+        card.className = 'overlay-user';
+        const bpm = user.connected && user.bpm ? Number(user.bpm) : null;
+        const value = document.createElement('strong');
+        value.textContent = bpm ? String(bpm) : '--';
+        const name = document.createElement('span');
+        name.textContent = user.name;
+        name.title = user.name;
+        card.append(value, name);
+        usersElement.append(card);
+      }
+      if (!state.users.length) usersElement.textContent = '未选择用户';
+    }
+    return;
+  }
   const bpm = state.connected && state.bpm ? Number(state.bpm) : null;
   if (bpm === lastBpm) return;
   lastBpm = bpm;
@@ -152,7 +176,8 @@ function updateWeather(weather) {
 }
 
 window.overlay.onState((state) => {
-  applyHeartZone(state.zoneLevel || 'idle');
+  const showsOnlyLocal = !state.users || (state.users.length === 1 && state.users[0].id === 'local');
+  applyHeartZone(showsOnlyLocal ? state.zoneLevel || 'idle' : 'idle');
   updateHeartRate(state);
   updateWeather(state.weather);
   mediaState = state.media;

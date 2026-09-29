@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('desktop', {
+  remoteUsers: (action, data) => ipcRenderer.invoke('remote-users', action, data),
+  onRemoteUsers: (handler) => {
+    ipcRenderer.on('remote-users-state', (_event, state) => handler(state));
+  },
   onBluetoothDevices: (handler) => {
     ipcRenderer.on('bluetooth-devices', (_event, devices) => handler(devices));
   },

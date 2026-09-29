@@ -348,7 +348,7 @@ function renderDeviceList(devices) {
   if (!devices.length) {
     const placeholder = document.createElement('div');
     placeholder.className = 'device-placeholder';
-    placeholder.textContent = '尚未发现设备，请确认 iPhone 正在广播';
+    placeholder.textContent = '尚未发现设备，请开启设备的蓝牙心率广播；扫描不到时可取消后启用兼容扫描';
     elements.deviceList.append(placeholder);
     return;
   }
@@ -374,9 +374,17 @@ function renderDeviceList(devices) {
 }
 
 function parseHeartRate(dataView) {
+  if (!dataView || dataView.byteLength < 2) return null;
   const flags = dataView.getUint8(0);
   const usesUint16 = (flags & 0x01) !== 0;
+  if (usesUint16 && dataView.byteLength < 3) return null;
   return usesUint16 ? dataView.getUint16(1, true) : dataView.getUint8(1);
+}
+
+function heartRateScanOptions() {
+  return document.querySelector('#bluetooth-scan-all').checked
+    ? { acceptAllDevices: true, optionalServices: [HEART_RATE_SERVICE] }
+    : { filters: [{ services: [HEART_RATE_SERVICE] }] };
 }
 
 function zoneFor(bpm) {
@@ -432,6 +440,8 @@ async function connectGatt() {
   setStatus('scanning', reconnectAttempts ? '正在重新连接' : '正在连接');
 
   try {
+    heartRateCharacteristic?.removeEventListener('characteristicvaluechanged', onHeartRateChanged);
+    heartRateCharacteristic = undefined;
     const server = await bluetoothDevice.gatt.connect();
     const service = await server.getPrimaryService(HEART_RATE_SERVICE);
     heartRateCharacteristic = await service.getCharacteristic(
@@ -448,11 +458,19 @@ async function connectGatt() {
     setControls(true);
     window.desktop.updateHeartRate({ connected: true });
   } catch (error) {
+    if (['NotFoundError', 'NotSupportedError', 'SecurityError'].includes(error.name)) {
+      disconnect();
+      setStatus('error', error.name === 'SecurityError'
+        ? '无法访问心率服务，请重新扫描授权'
+        : '设备未提供可用的标准蓝牙心率服务，请开启心率广播或选择其他设备');
+      return;
+    }
     scheduleReconnect(error);
   }
 }
 
 function scheduleReconnect(error) {
+  clearTimeout(reconnectTimer);
   if (intentionalDisconnect || !bluetoothDevice) {
     setStatus('error', '连接已断开');
     return;
@@ -466,6 +484,7 @@ function scheduleReconnect(error) {
 }
 
 function onGattDisconnected() {
+  if (intentionalDisconnect) return;
   setControls(false);
   window.desktop.updateHeartRate({ connected: false });
   scheduleReconnect(new Error('GATT disconnected'));
@@ -478,16 +497,21 @@ async function requestAndConnect() {
   }
 
   intentionalDisconnect = false;
+  clearTimeout(reconnectTimer);
   showModal();
   setStatus('scanning', '正在扫描');
 
   try {
-    const device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [HEART_RATE_SERVICE] }]
-    });
+    const device = await navigator.bluetooth.requestDevice(heartRateScanOptions());
 
+    if (bluetoothDevice && bluetoothDevice !== device) {
+      bluetoothDevice.removeEventListener('gattserverdisconnected', onGattDisconnected);
+      heartRateCharacteristic?.removeEventListener('characteristicvaluechanged', onHeartRateChanged);
+      if (bluetoothDevice.gatt?.connected) bluetoothDevice.gatt.disconnect();
+      heartRateCharacteristic = undefined;
+    }
     bluetoothDevice = device;
-    elements.deviceName.textContent = device.name || 'iPhone';
+    elements.deviceName.textContent = device.name || '蓝牙心率设备';
     bluetoothDevice.addEventListener('gattserverdisconnected', onGattDisconnected);
     setControls(false);
     await connectGatt();
@@ -512,12 +536,14 @@ function disconnect() {
       onHeartRateChanged
     );
   }
+  bluetoothDevice?.removeEventListener('gattserverdisconnected', onGattDisconnected);
   if (bluetoothDevice?.gatt?.connected) bluetoothDevice.gatt.disconnect();
 
   heartRateCharacteristic = undefined;
   bluetoothDevice = undefined;
   reconnectAttempts = 0;
   elements.deviceName.textContent = '';
+  elements.bpm.textContent = '--';
   elements.heartPulse.classList.remove('active');
   elements.zone.className = 'zone-pill zone-idle';
   elements.zone.textContent = '等待心率';

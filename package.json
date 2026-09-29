@@ -1,7 +1,7 @@
 {
   "name": "watch-heart-desktop",
   "version": "1.7.0",
-  "description": "Receive and display Apple Watch heart rate relayed by an iPhone BLE broadcaster.",
+  "description": "Receive and display heart rate from standard BLE heart rate sensors and broadcasters.",
   "main": "src/main.js",
   "author": "Codex",
   "license": "MIT",

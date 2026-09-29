@@ -33,6 +33,8 @@ const {
 } = require('./media-service');
 const { SodaLyricsDirectService } = require('./soda-lyrics-service');
 const { GameService } = require('./game-service');
+const { RemoteHeartService } = require('./remote-heart-service');
+let remoteHeart;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
@@ -503,7 +505,10 @@ function hardenWindow(window) {
 
 function sendOverlayState() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
-  overlayWindow.webContents.send('overlay-state', overlayState);
+  overlayWindow.webContents.send('overlay-state', {
+    ...overlayState,
+    users: remoteHeart?.snapshot().users.filter((user) => user.selected)
+  });
 }
 
 function publishMediaState(media) {
@@ -586,7 +591,7 @@ function createOverlayWindow() {
     minWidth: Math.round(OVERLAY_MIN_WIDTH * OVERLAY_MIN_SCALE),
     minHeight: Math.round(OVERLAY_BASE_HEIGHT * OVERLAY_MIN_SCALE),
     maxWidth: Math.round(OVERLAY_MAX_WIDTH * OVERLAY_MAX_SCALE),
-    maxHeight: Math.round(OVERLAY_BASE_HEIGHT * OVERLAY_MAX_SCALE),
+    maxHeight: screen.getPrimaryDisplay().workArea.height,
     ...(overlayPosition || {}),
     frame: false,
     transparent: true,
@@ -612,6 +617,7 @@ function createOverlayWindow() {
   overlayWindow.loadFile(path.join(__dirname, 'overlay.html'));
   overlayWindow.webContents.once('did-finish-load', () => {
     overlayWindow.webContents.setZoomFactor(overlayScale);
+    resizeOverlayWindow(overlayWindow);
     sendOverlayState();
     sendOverlaySettings();
   });
@@ -724,7 +730,10 @@ function setLyricsMode(mode) {
 function resizeOverlayWindow(window) {
   const current = window.getBounds();
   const width = Math.round((overlayHeartOnly ? Math.min(280, overlayWidth) : overlayWidth) * overlayScale);
-  const height = Math.round(OVERLAY_BASE_HEIGHT * overlayScale);
+  const userCount = typeof remoteHeart === 'undefined' ? 1 :
+    (remoteHeart?.snapshot().users.filter((user) => user.selected).length || 1);
+  const narrowExtra = typeof remoteHeart !== 'undefined' && remoteHeart && overlayHeartOnly && overlayWidth <= 240 ? 36 : 0;
+  const height = Math.round((OVERLAY_BASE_HEIGHT + narrowExtra + Math.max(0, userCount - 1) * 64) * overlayScale);
   const display = screen.getDisplayMatching(current);
   const area = display.workArea;
   const centeredX = current.x + Math.round((current.width - width) / 2);
@@ -737,7 +746,10 @@ function resizeOverlayWindow(window) {
     area.y + area.height - height,
     Math.max(area.y, centeredY)
   );
-  window.setBounds({ x, y, width, height }, false);
+  const nextHeight = Math.min(height, area.height);
+  if (current.width !== width || current.height !== nextHeight) {
+    window.setBounds({ x, y: Math.max(area.y, y), width, height: nextHeight }, false);
+  }
 }
 
 function createWindow() {
@@ -804,6 +816,34 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   loadOverlaySettings();
+  const remoteSettingsPath = path.join(app.getPath('userData'), 'remote-users.json');
+  let savedRemote = {};
+  try { savedRemote = JSON.parse(fs.readFileSync(remoteSettingsPath, 'utf8')); } catch {}
+  remoteHeart = new RemoteHeartService({
+    saved: savedRemote || {},
+    onSave: (settings) => {
+      fs.writeFileSync(remoteSettingsPath, JSON.stringify(settings, null, 2));
+    },
+    onChange: (state) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('remote-users-state', state);
+      if (overlayWindow && !overlayWindow.isDestroyed()) resizeOverlayWindow(overlayWindow);
+      sendOverlayState();
+    }
+  });
+  remoteHeart.start();
+  ipcMain.handle('remote-users', async (event, action, data = {}) => {
+    if (!isMainSender(event)) return { ok: false, error: '不允许的调用' };
+    try {
+      if (action === 'connect') await remoteHeart.connect(data.address, data.name);
+      else if (action === 'edit') remoteHeart.edit(data.id, data);
+      else if (action === 'remove') remoteHeart.remove(data.id);
+      else if (action === 'share') await remoteHeart.setSharing(Boolean(data.enabled));
+      else if (action !== 'get') throw new Error('未知操作');
+      return { ok: true, state: remoteHeart.snapshot() };
+    } catch (error) {
+      return { ok: false, error: error.message };
+    }
+  });
   gameService = new GameService({
     userDataPath: app.getPath('userData'),
     onState: (state) => {
@@ -976,6 +1016,7 @@ app.whenReady().then(async () => {
       zoneLevel: String(state?.zoneLevel || 'idle').slice(0, 20)
     };
     if (overlayState.bpm) gameService.record(overlayState.bpm, overlayState.zoneLevel);
+    remoteHeart.updateLocal(overlayState);
     sendOverlayState();
   });
 
@@ -1084,6 +1125,7 @@ app.on('will-quit', () => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  remoteHeart?.stop();
   clearTimeout(settingsSaveTimer);
   clearTimeout(overlayDestroyTimer);
   gameService?.stop();

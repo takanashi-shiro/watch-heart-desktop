@@ -399,3 +399,38 @@ body.transparent-background .overlay-bar {
   backdrop-filter: none;
   animation: none;
 }
+
+.heart-section[hidden], .overlay-users[hidden] { display: none; }
+.overlay-users {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 112px;
+  min-width: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  -webkit-app-region: no-drag;
+}
+.overlay-user {
+  flex: 0 0 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+.overlay-user strong { color: var(--overlay-accent); font-size: 30px; line-height: 1.15; }
+.overlay-user span {
+  width: 100%;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 18px;
+}
+.heart-only .overlay-users { flex: 1 1 auto; }
+@media (max-width: 240px) {
+  .heart-only .overlay-users { flex: 1 1 auto; }
+  .heart-only .overlay-user { flex-basis: 64px; }
+  .heart-only .overlay-user strong { font-size: clamp(24px, 20vw, 40px); }
+}
