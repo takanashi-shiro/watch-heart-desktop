@@ -18,6 +18,31 @@ function endpoint(value) {
   return { host, port, key: `${net.isIP(host) === 6 ? `[${host}]` : host}:${port}` };
 }
 
+function normalizeRelayServer(addr) {
+  let text = String(addr).trim();
+  if (!text) throw new Error('中继服务器地址不能为空');
+  if (!text.startsWith('ws://') && !text.startsWith('wss://')) {
+    text = 'ws://' + text;
+  }
+  try {
+    const url = new URL(text);
+    if (!url.port) url.port = '32124';
+    return url.toString();
+  } catch (e) {
+    throw new Error('中继服务器地址无效: ' + addr);
+  }
+}
+
+function parseRelayAddress(addr) {
+  if (typeof addr !== 'string') return null;
+  const idx = addr.indexOf('relay:');
+  if (idx !== 0) return null;
+  const afterPrefix = addr.slice(6);
+  const roomIdx = afterPrefix.lastIndexOf(':');
+  if (roomIdx <= 0) return null;
+  return { relayServer: afterPrefix.slice(0, roomIdx), roomId: afterPrefix.slice(roomIdx + 1) };
+}
+
 class RemoteHeartService {
   constructor({ saved = {}, onChange = () => {}, onSave = () => {}, onConnectionRequest = null } = {}) {
     this.onChange = onChange;
@@ -27,21 +52,25 @@ class RemoteHeartService {
     this.users = new Map();
     this.pending = new Set();
     this.stopped = false;
-    this.sharing = false;
+    this.sharing = true;
     this.shareError = '';
     this.server = null;
     this.broadcastInterval = null;
     this.sharingClients = new Set();
     for (const item of Array.isArray(saved.users) ? saved.users : []) {
       try {
-        const address = endpoint(item.address);
-        this.users.set(address.key, { id: address.key, address: address.key, name: String(item.name || address.key).slice(0, 40), selected: item.selected !== false, connected: false, online: false, bpm: null });
+        if (typeof item.address === 'string' && item.address.startsWith('relay:')) {
+          this.users.set(item.address, { id: item.address, address: item.address, name: String(item.name || item.address).slice(0, 40), selected: item.selected !== false, connected: false, online: false, bpm: null, type: 'relay' });
+        } else {
+          const address = endpoint(item.address);
+          this.users.set(address.key, { id: address.key, address: address.key, name: String(item.name || address.key).slice(0, 40), selected: item.selected !== false, connected: false, online: false, bpm: null });
+        }
       } catch {}
     }
   }
 
   snapshot() {
-    return { users: [{ ...this.local }, ...Array.from(this.users.values(), (user) => ({ ...user }))], sharing: this.sharing, shareError: this.shareError, port: PORT };
+    const users = Array.from(this.users.values()).map((user) => { const { _wsClient, ...rest } = user; return rest; }); return { users: [{ ...this.local }, ...users], sharing: this.sharing, shareError: this.shareError, port: PORT };
   }
 
   publish(save = false) {
@@ -141,8 +170,16 @@ class RemoteHeartService {
   }
 
   start() {
+    if (this.sharing) {
+      this.setSharing(true);
+    }
     for (const user of this.users.values()) {
-      this.connectToRemote(user);
+      if (user.type === 'relay') {
+        const parsed = parseRelayAddress(user.address);
+        if (parsed) this.connectToRelay(user, parsed.relayServer, parsed.roomId);
+      } else {
+        this.connectToRemote(user);
+      }
     }
   }
 
@@ -189,12 +226,13 @@ class RemoteHeartService {
   }
 
   connectViaRelay(data) {
-    const relayKey = 'relay:' + data.relayServer + ':' + data.roomId;
+    const relayServer = normalizeRelayServer(data.relayServer);
+    const relayKey = 'relay:' + relayServer + ':' + data.roomId;
     if (this.users.has(relayKey)) throw new Error('该中继连接已添加');
     const user = { id: relayKey, address: relayKey, name: String(data.name || data.roomId).trim().slice(0, 40) || data.roomId, selected: true, online: true, connected: false, bpm: null, type: 'relay' };
     this.users.set(relayKey, user);
     this.publish(true);
-    this.connectToRelay(user, data.relayServer, data.roomId);
+    this.connectToRelay(user, relayServer, data.roomId);
   }
 
   connectToRelay(user, relayServer, roomId) {
@@ -211,11 +249,15 @@ class RemoteHeartService {
       try {
         const msg = JSON.parse(data);
         if (msg.type === 'heartbeat') {
-          Object.assign(user, { connected: msg.connected, bpm: msg.bpm, online: true });
+          if (msg.peerId) {
+            const peer = this.users.get(msg.peerId);
+            if (peer) {
+              peer._lastHeartbeat = Date.now();
+              Object.assign(peer, { connected: msg.connected, bpm: msg.connected ? msg.bpm : null, online: true });
+            }
+          }
           this.publish();
-        } else if (msg.type === 'peer-joined') {
-          // Another peer joined, notify
-        }
+      }
       } catch {}
     });
     ws.on('close', () => {
@@ -235,9 +277,37 @@ class RemoteHeartService {
     this.publish(true);
   }
 
+  disconnectRelay() {
+    let relayUser = null;
+    for (const user of this.users.values()) {
+      if (user.type === "relay") { relayUser = user; break; }
+    }
+    if (relayUser && relayUser._wsClient) {
+      relayUser._wsClient.close();
+    }
+    if (relayUser) {
+      this.users.delete(relayUser.id);
+      this.publish(true);
+    }
+  }
+
   remove(id) {
     this.users.delete(id);
     this.publish(true);
+  }
+
+  broadcastToRelay() {
+    const now = Date.now();
+    for (const user of this.users.values()) {
+      if (user.type === 'relay-peer' && user._lastHeartbeat && now - user._lastHeartbeat > 10000) {
+        // Peer is stale, remove
+        this.users.delete(user.id);
+        this.publish();
+      }
+      if (user.type === 'relay' && user._wsClient && user._wsClient.readyState === WebSocket.OPEN) {
+        user._wsClient.send(JSON.stringify({ type: 'heartbeat', connected: this.local.connected, bpm: this.local.bpm, peerId: 'local' }));
+      }
+    }
   }
 
   stop() {

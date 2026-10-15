@@ -60,10 +60,8 @@
           <input id="remote-name" placeholder="用户名（可选）" aria-label="新用户名称" maxlength="40">
           <button id="remote-connect" type="submit" class="primary-button">连接并添加用户</button>
         </form>
-        <label class="switch-control">
-          <input id="remote-sharing" type="checkbox">
-          <span>共享本机心率（IPv4 / IPv6，TCP 32123；仅限可信网络，能访问端口的设备均可读取）</span>
-        </label>
+          <div id="relay-status" class="relay-status"><span id="relay-status-text">中继服务器: 未连接</span><button id="relay-toggle" class="secondary-button">连接</button></div>
+
         <p>对方需运行支持远程功能的本程序并开启共享。IPv6 可直接输入，指定端口请用 [IPv6]:端口。勾选要显示的用户，主界面与悬浮窗同步；用户名可直接修改。共享每次启动默认关闭。</p>
         <p id="remote-message" role="status" aria-live="polite"></p>
         <div id="remote-user-list" class="remote-user-list"></div>

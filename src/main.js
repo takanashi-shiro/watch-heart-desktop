@@ -840,7 +840,7 @@ app.whenReady().then(async () => {
       if (action === 'connect') await remoteHeart.connect(data);
       else if (action === 'edit') remoteHeart.edit(data.id, data);
       else if (action === 'remove') remoteHeart.remove(data.id);
-      else if (action === 'share') await remoteHeart.setSharing(Boolean(data.enabled));
+      else if (action === 'disconnect-relay') { remoteHeart.disconnectRelay(); } else if (action === 'share') await remoteHeart.setSharing(Boolean(data.enabled));
       else if (action !== 'get') throw new Error('未知操作');
       return { ok: true, state: remoteHeart.snapshot() };
     } catch (error) {

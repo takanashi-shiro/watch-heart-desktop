@@ -55,5 +55,8 @@
     "portable": {
       "artifactName": "Watch-Heart-${version}-portable.exe"
     }
+  },
+  "allowScripts": {
+    "electron-winstaller@5.4.0": true
   }
 }
