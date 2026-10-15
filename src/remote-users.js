@@ -70,15 +70,33 @@ function renderRemoteUsers(state) {
   if (!selectedHearts.children.length) selectedHearts.textContent = '请选择要显示的用户';
 }
 
+
+document.querySelectorAll('input[name="connection-type"]').forEach(radio => {
+  radio.addEventListener('change', () => {
+    const isRelay = document.querySelector('input[name="connection-type"][value="relay"]').checked;
+    document.querySelector('.direct-connection-fields').style.display = isRelay ? 'none' : '';
+    document.querySelector('.relay-connection-fields').style.display = isRelay ? '' : 'none';
+    document.getElementById('remote-address').required = !isRelay;
+  });
+});
 document.querySelector('#remote-connect-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const button = document.querySelector('#remote-connect');
   button.disabled = true;
   remoteMessage.textContent = '正在连接…';
-  const ok = await remoteAction('connect', {
-    address: document.querySelector('#remote-address').value,
+  const isRelay = document.querySelector('input[name="connection-type"][value="relay"]').checked;
+  const data = {
     name: document.querySelector('#remote-name').value
-  });
+  };
+  if (isRelay) {
+    data.type = 'relay';
+    data.relayServer = document.querySelector('#relay-server').value;
+    data.roomId = document.querySelector('#relay-room').value;
+  } else {
+    data.type = 'direct';
+    data.address = document.querySelector('#remote-address').value;
+  }
+  const ok = await remoteAction('connect', data);
   if (ok) remoteMessage.textContent = '连接成功，已添加用户';
   button.disabled = false;
 });

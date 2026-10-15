@@ -39,8 +39,24 @@
 
       <section class="theme-card remote-panel">
         <h2>多用户心率</h2>
+        <div class="connection-type-selector">
+          <label>
+            <input type="radio" name="connection-type" value="direct" checked>
+            直连（局域网）
+          </label>
+          <label>
+            <input type="radio" name="connection-type" value="relay">
+            通过中继服务器
+          </label>
+        </div>
         <form id="remote-connect-form" class="remote-connect-form">
-          <input id="remote-address" placeholder="IPv4 / IPv6，例如 192.168.1.20 或 2001:db8::1" aria-label="远程 IPv4 或 IPv6 地址" required maxlength="100">
+          <div class="direct-connection-fields">
+            <input id="remote-address" placeholder="IPv4 / IPv6，例如 192.168.1.20" aria-label="远程 IP 地址" maxlength="100">
+          </div>
+          <div class="relay-connection-fields" style="display:none;">
+            <input id="relay-server" placeholder="中继服务器地址，例如 ws://server:32124" aria-label="中继服务器地址" maxlength="200" required>
+            <input id="relay-room" placeholder="房间 ID" aria-label="房间 ID" maxlength="50" required>
+          </div>
           <input id="remote-name" placeholder="用户名（可选）" aria-label="新用户名称" maxlength="40">
           <button id="remote-connect" type="submit" class="primary-button">连接并添加用户</button>
         </form>

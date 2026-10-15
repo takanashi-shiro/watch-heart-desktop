@@ -173,16 +173,58 @@ class RemoteHeartService {
     ws.on('error', () => {});
   }
 
-  async connect(value, name) {
-    const address = endpoint(value);
+  async connect(data) {
+    if (data.type === 'relay') {
+      return this.connectViaRelay(data);
+    }
+    const address = endpoint(data.address);
     if (this.users.has(address.key) || this.pending.has(address.key)) throw new Error('该地址已经添加或正在连接');
     this.pending.add(address.key);
     try {
-      const user = { id: address.key, address: address.key, name: String(name || address.key).trim().slice(0, 40) || address.key, selected: true, online: true, connected: false, bpm: null };
+      const user = { id: address.key, address: address.key, name: String(data.name || address.key).trim().slice(0, 40) || address.key, selected: true, online: true, connected: false, bpm: null };
       this.users.set(user.id, user);
       this.publish(true);
       this.connectToRemote(user);
     } finally { this.pending.delete(address.key); }
+  }
+
+  connectViaRelay(data) {
+    const relayKey = 'relay:' + data.relayServer + ':' + data.roomId;
+    if (this.users.has(relayKey)) throw new Error('该中继连接已添加');
+    const user = { id: relayKey, address: relayKey, name: String(data.name || data.roomId).trim().slice(0, 40) || data.roomId, selected: true, online: true, connected: false, bpm: null, type: 'relay' };
+    this.users.set(relayKey, user);
+    this.publish(true);
+    this.connectToRelay(user, data.relayServer, data.roomId);
+  }
+
+  connectToRelay(user, relayServer, roomId) {
+    const url = new URL(relayServer);
+    url.pathname = '/room/' + roomId;
+    url.searchParams.set('peerId', user.id);
+    const ws = new WebSocket(url.toString());
+    user._wsClient = ws;
+    ws.on('open', () => {
+      Object.assign(user, { online: true });
+      this.publish();
+    });
+    ws.on('message', (data) => {
+      try {
+        const msg = JSON.parse(data);
+        if (msg.type === 'heartbeat') {
+          Object.assign(user, { connected: msg.connected, bpm: msg.bpm, online: true });
+          this.publish();
+        } else if (msg.type === 'peer-joined') {
+          // Another peer joined, notify
+        }
+      } catch {}
+    });
+    ws.on('close', () => {
+      if (!this.stopped) {
+        Object.assign(user, { online: false, connected: false, bpm: null });
+        this.publish();
+      }
+    });
+    ws.on('error', () => {});
   }
 
   edit(id, patch) {

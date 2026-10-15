@@ -837,7 +837,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('remote-users', async (event, action, data = {}) => {
     if (!isMainSender(event)) return { ok: false, error: '不允许的调用' };
     try {
-      if (action === 'connect') await remoteHeart.connect(data.address, data.name);
+      if (action === 'connect') await remoteHeart.connect(data);
       else if (action === 'edit') remoteHeart.edit(data.id, data);
       else if (action === 'remove') remoteHeart.remove(data.id);
       else if (action === 'share') await remoteHeart.setSharing(Boolean(data.enabled));
