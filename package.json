@@ -8,7 +8,8 @@
   "dependencies": {
     "@electron/asar": "^4.0.1",
     "electron-updater": "^6.8.9",
-    "windows-media-sessions": "^1.0.3"
+    "windows-media-sessions": "^1.0.3",
+    "ws": "^8.18.0"
   },
   "scripts": {
     "start": "electron .",

@@ -1,14 +1,12 @@
-const http = require('node:http');
 const net = require('node:net');
-const { URL } = require('node:url');
+const { WebSocket, WebSocketServer } = require('ws');
 
 const PORT = 32123;
-const PATH = '/watch-heart/v1';
+const PROTOCOL = 'watch-heart/1';
 
 function endpoint(value) {
   const text = String(value || '').trim();
-  const match = net.isIP(text) === 6 ? [text, text] :
-    text.match(/^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/);
+  const match = text.match(/^(\[?[^:]+]?)(?::(\d+))?$/);
   if (!match) throw new Error('请输入 IPv4 或 IPv6 地址；IPv6 指定端口时请使用 [地址]:端口');
   let host = match[1].replace(/^\[|\]$/g, '');
   const port = Number(match[2] || PORT);
@@ -20,47 +18,20 @@ function endpoint(value) {
   return { host, port, key: `${net.isIP(host) === 6 ? `[${host}]` : host}:${port}` };
 }
 
-function readRemote(address) {
-  return new Promise((resolve, reject) => {
-    const request = http.get({
-      hostname: address.host, port: address.port, path: PATH, timeout: 3000
-    }, (response) => {
-      let body = '';
-      response.setEncoding('utf8');
-      response.on('error', reject);
-      response.on('data', (chunk) => {
-        body += chunk;
-        if (body.length > 4096) request.destroy(new Error('响应过大'));
-      });
-      response.on('end', () => {
-        try {
-          const data = JSON.parse(body);
-          if (response.statusCode !== 200 || data.protocol !== 'watch-heart/1' ||
-              typeof data.connected !== 'boolean' ||
-              (data.bpm !== null && (!Number.isInteger(data.bpm) || data.bpm < 1 || data.bpm > 255))) {
-            throw new Error('对方不是兼容的心率共享服务');
-          }
-          resolve({ connected: data.connected, bpm: data.connected ? data.bpm : null });
-        } catch (error) { reject(error); }
-      });
-    });
-    const deadline = setTimeout(() => request.destroy(new Error('连接超时')), 4000);
-    request.on('close', () => clearTimeout(deadline));
-    request.on('timeout', () => request.destroy(new Error('连接超时')));
-    request.on('error', reject);
-  });
-}
-
 class RemoteHeartService {
-  constructor({ saved = {}, onChange = () => {}, onSave = () => {} } = {}) {
+  constructor({ saved = {}, onChange = () => {}, onSave = () => {}, onConnectionRequest = null } = {}) {
     this.onChange = onChange;
     this.onSave = onSave;
+    this.onConnectionRequest = onConnectionRequest;
     this.local = { id: 'local', name: saved.localName || '本机', selected: saved.localSelected !== false, connected: false, bpm: null };
     this.users = new Map();
     this.pending = new Set();
     this.stopped = false;
     this.sharing = false;
     this.shareError = '';
+    this.server = null;
+    this.broadcastInterval = null;
+    this.sharingClients = new Set();
     for (const item of Array.isArray(saved.users) ? saved.users : []) {
       try {
         const address = endpoint(item.address);
@@ -85,6 +56,121 @@ class RemoteHeartService {
     this.local.connected = Boolean(state.connected);
     this.local.bpm = this.local.connected ? state.bpm : null;
     this.publish();
+    this.broadcast();
+  }
+
+  broadcast() {
+    if (!this.server) return;
+    const payload = JSON.stringify({ protocol: PROTOCOL, connected: this.local.connected, bpm: this.local.bpm });
+    this.server.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(payload);
+      }
+    });
+  }
+
+  handleRemoteMessage(client, data) {
+    try {
+      const message = JSON.parse(data);
+      if (message.protocol !== PROTOCOL) return;
+      let user = null;
+      for (const [key, u] of this.users) {
+        if (u._wsClient === client) {
+          user = u;
+          break;
+        }
+      }
+      if (!user) return;
+      Object.assign(user, { connected: message.connected, bpm: message.connected ? message.bpm : null, online: true });
+      this.publish();
+    } catch {}
+  }
+
+  async setSharing(enabled) {
+    if (!enabled) {
+      this.server?.close();
+      this.server = null;
+      this.sharing = false;
+      this.publish();
+      return;
+    }
+    if (this.server) return;
+    this.shareError = '';
+    const server = new WebSocketServer({ port: PORT });
+    server.on('connection', async (client) => {
+      const address = client._socket?.remoteAddress || '未知';
+      let accepted = true;
+      if (this.onConnectionRequest) {
+        try {
+          accepted = await this.onConnectionRequest(address);
+        } catch (e) {
+          accepted = false;
+        }
+      }
+      if (!accepted) {
+        client.close();
+        return;
+      }
+      client.on('message', (data) => {
+        this.handleRemoteMessage(client, data);
+      });
+      client.on('close', () => {
+        for (const user of this.users.values()) {
+          if (user._wsClient === client) {
+            Object.assign(user, { online: false, connected: false, bpm: null });
+            this.publish();
+          }
+        }
+      });
+    });
+    server.on('error', (error) => {
+      if (this.server !== server) return;
+      this.server = null;
+      this.sharing = false;
+      this.shareError = error.message;
+      this.publish();
+    });
+    this.server = server;
+    this.sharing = true;
+    this.publish();
+
+    if (this.broadcastInterval) clearInterval(this.broadcastInterval);
+    this.broadcastInterval = setInterval(() => {
+      if (!this.stopped) this.broadcast();
+    }, 1000);
+  }
+
+  start() {
+    for (const user of this.users.values()) {
+      this.connectToRemote(user);
+    }
+  }
+
+  connectToRemote(user) {
+    const ws = new WebSocket(`ws://${user.address}`);
+    user._wsClient = ws;
+    ws.on('open', () => {
+      Object.assign(user, { online: true });
+      this.publish();
+    });
+    ws.on('message', (data) => {
+      try {
+        const message = JSON.parse(data);
+        if (message.protocol === PROTOCOL) {
+          Object.assign(user, { connected: message.connected, bpm: message.connected ? message.bpm : null, online: true });
+        }
+      } catch {}
+    });
+    ws.on('close', () => {
+      if (!this.stopped) {
+        Object.assign(user, { online: false, connected: false, bpm: null });
+        this.publish();
+        setTimeout(() => {
+          if (!this.stopped) this.connectToRemote(user);
+        }, 2000);
+      }
+    });
+    ws.on('error', () => {});
   }
 
   async connect(value, name) {
@@ -92,12 +178,10 @@ class RemoteHeartService {
     if (this.users.has(address.key) || this.pending.has(address.key)) throw new Error('该地址已经添加或正在连接');
     this.pending.add(address.key);
     try {
-      const state = await readRemote(address);
-      if (this.stopped) throw new Error('服务已停止');
-      const user = { id: address.key, address: address.key, name: String(name || address.key).trim().slice(0, 40) || address.key, selected: true, online: true, ...state };
+      const user = { id: address.key, address: address.key, name: String(name || address.key).trim().slice(0, 40) || address.key, selected: true, online: true, connected: false, bpm: null };
       this.users.set(user.id, user);
       this.publish(true);
-      this.poll(user);
+      this.connectToRemote(user);
     } finally { this.pending.delete(address.key); }
   }
 
@@ -114,66 +198,16 @@ class RemoteHeartService {
     this.publish(true);
   }
 
-  async poll(user) {
-    while (!this.stopped && this.users.get(user.id) === user) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      if (this.stopped || this.users.get(user.id) !== user) return;
-      try {
-        const state = await readRemote(endpoint(user.address));
-        Object.assign(user, state, { online: true });
-      } catch {
-        Object.assign(user, { online: false, connected: false, bpm: null });
-      }
-      if (!this.stopped && this.users.get(user.id) === user) this.publish();
-    }
-  }
-
-  start() {
-    for (const user of this.users.values()) this.poll(user);
-  }
-
-  async setSharing(enabled) {
-    if (!enabled) {
-      this.server?.close();
-      this.server = null;
-      this.sharing = false;
-      this.publish();
-      return;
-    }
-    if (this.server) return;
-    this.shareError = '';
-    const server = http.createServer((request, response) => {
-      if (request.method !== 'GET' || request.url !== PATH) {
-        response.writeHead(404).end();
-        return;
-      }
-      response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      response.end(JSON.stringify({ protocol: 'watch-heart/1', connected: this.local.connected, bpm: this.local.bpm }));
-    });
-    server.requestTimeout = 5000;
-    server.headersTimeout = 5000;
-    server.keepAliveTimeout = 1000;
-    this.server = server;
-    server.on('error', (error) => {
-      if (this.server !== server) return;
-      this.server = null;
-      this.sharing = false;
-      this.shareError = error.message;
-      this.publish();
-    });
-    await new Promise((resolve, reject) => {
-      server.once('error', reject);
-      // Omitting host lets Node use dual-stack IPv6, with IPv4 fallback if unavailable.
-      server.listen({ port: PORT, ipv6Only: false }, resolve);
-    });
-    if (this.server === server) this.sharing = true;
-    this.publish();
-  }
-
   stop() {
     this.stopped = true;
     this.server?.close();
+    this.server = null;
+    if (this.broadcastInterval) {
+      clearInterval(this.broadcastInterval);
+      this.broadcastInterval = null;
+    this.sharingClients = new Set();
+    }
   }
 }
 
-module.exports = { RemoteHeartService, endpoint, readRemote, PORT, PATH };
+module.exports = { RemoteHeartService, endpoint, PORT };
