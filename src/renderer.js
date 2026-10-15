@@ -28,7 +28,6 @@ const elements = {
 
 const overlayControls = {
   visible: document.querySelector('#overlay-visible'),
-  heartOnly: document.querySelector('#overlay-heart-only'),
   size: document.querySelector('#overlay-size'),
   sizeValue: document.querySelector('#overlay-size-value'),
   width: document.querySelector('#overlay-width'),
@@ -49,7 +48,6 @@ const themeControls = {
   accent: document.querySelector('#theme-accent'),
   background: document.querySelector('#theme-background'),
   text: document.querySelector('#theme-text'),
-  lyric: document.querySelector('#theme-lyric'),
   opacity: document.querySelector('#theme-opacity'),
   opacityValue: document.querySelector('#theme-opacity-value'),
   radius: document.querySelector('#theme-radius'),
@@ -63,7 +61,6 @@ const THEME_PRESETS = {
     accent: '#ff315d',
     background: '#0a0c12',
     text: '#f7f8fb',
-    lyric: '#e8eaf0',
     opacity: 88,
     blur: 16,
     radius: 18,
@@ -73,7 +70,6 @@ const THEME_PRESETS = {
     accent: '#00e5ff',
     background: '#090021',
     text: '#f6f0ff',
-    lyric: '#bff8ff',
     opacity: 82,
     blur: 20,
     radius: 20,
@@ -83,7 +79,6 @@ const THEME_PRESETS = {
     accent: '#61a8ff',
     background: '#071522',
     text: '#edf7ff',
-    lyric: '#d7ecff',
     opacity: 84,
     blur: 18,
     radius: 16,
@@ -93,7 +88,6 @@ const THEME_PRESETS = {
     accent: '#ffb02e',
     background: '#180f05',
     text: '#fff8ec',
-    lyric: '#ffe6b8',
     opacity: 88,
     blur: 12,
     radius: 14,
@@ -103,38 +97,11 @@ const THEME_PRESETS = {
     accent: '#ffffff',
     background: '#000000',
     text: '#ffffff',
-    lyric: '#ffffff',
     opacity: 58,
     blur: 0,
     radius: 12,
     fontScale: 96
   }
-};
-
-const weatherElements = {
-  form: document.querySelector('#weather-form'),
-  city: document.querySelector('#weather-city'),
-  icon: document.querySelector('#weather-icon'),
-  temperature: document.querySelector('#weather-temperature'),
-  description: document.querySelector('#weather-description'),
-  feelsLike: document.querySelector('#weather-feels-like'),
-  wind: document.querySelector('#weather-wind'),
-  location: document.querySelector('#weather-location'),
-  locate: document.querySelector('#weather-locate')
-};
-
-const mediaElements = {
-  title: document.querySelector('#music-title'),
-  artist: document.querySelector('#music-artist'),
-  lyric: document.querySelector('#music-lyric'),
-  form: document.querySelector('#lyrics-form'),
-  searchTitle: document.querySelector('#lyrics-title'),
-  searchArtist: document.querySelector('#lyrics-artist'),
-  automatic: document.querySelector('#lyrics-auto'),
-  modeInputs: [...document.querySelectorAll('input[name="lyrics-mode"]')],
-  sodaAutoHide: document.querySelector('#lyrics-auto-hide'),
-  sodaDirectReconnect: document.querySelector('#lyrics-direct-reconnect'),
-  sodaDirectStatus: document.querySelector('#lyrics-direct-status')
 };
 
 const gameControls = {
@@ -224,17 +191,12 @@ function renderUpdateStatus(status) {
   elements.installUpdate.classList.toggle('hidden', status?.state !== 'downloaded');
 }
 
-function hasMojibake(text) {
-  return /�|锟|\?\?\?/.test(String(text || '')); 
-}
-
 function readThemeControls() {
   return {
     preset: themeControls.preset.value,
     accent: themeControls.accent.value,
     background: themeControls.background.value,
     text: themeControls.text.value,
-    lyric: themeControls.lyric.value,
     opacity: Number(themeControls.opacity.value),
     radius: Number(themeControls.radius.value),
     fontScale: Number(themeControls.fontScale.value)
@@ -248,7 +210,6 @@ function syncThemeControls(theme) {
   themeControls.accent.value = currentTheme.accent;
   themeControls.background.value = currentTheme.background;
   themeControls.text.value = currentTheme.text;
-  themeControls.lyric.value = currentTheme.lyric;
   themeControls.opacity.value = String(currentTheme.opacity);
   themeControls.opacityValue.textContent = `${Math.round(currentTheme.opacity)}%`;
   themeControls.radius.value = String(currentTheme.radius);
@@ -571,108 +532,6 @@ async function reconnectFromTray() {
   await requestAndConnect();
 }
 
-function renderWeather(weather, persist) {
-  weatherElements.city.value = weather.city;
-  weatherElements.icon.textContent = weather.icon || '◌';
-  weatherElements.temperature.textContent =
-    weather.temperatureText || `${Math.round(weather.temperature)}°`;
-  weatherElements.description.textContent =
-    weather.airQuality ? `${weather.label} · 空气${weather.airQuality}` : weather.label;
-  weatherElements.feelsLike.textContent =
-    weather.temperatureText || `${Math.round(weather.apparentTemperature)}°`;
-  weatherElements.wind.textContent =
-    weather.windText || `${Math.round(weather.windSpeed)} km/h`;
-  weatherElements.location.textContent =
-    [weather.city, weather.region || '中国大陆天气源'].filter(Boolean).join(' · ');
-  weatherElements.location.title = '天气来源：国内公共天气接口';
-  if (persist) localStorage.setItem('weatherCity', weather.city);
-  window.desktop.updateWeather(weather);
-}
-
-async function loadWeather(city, persist = false) {
-  const trimmedCity = city.trim();
-  if (!trimmedCity) return;
-
-  weatherElements.description.textContent = '正在更新…';
-
-  try {
-    renderWeather(await window.desktop.getChinaWeather(trimmedCity), persist);
-  } catch (error) {
-    weatherElements.description.textContent = error.message;
-    console.error('Weather update failed:', error);
-  }
-}
-
-async function locateWeather() {
-  weatherElements.locate.disabled = true;
-  weatherElements.description.textContent = '正在通过 IP 定位城市…';
-
-  try {
-    const location = await window.desktop.locateChinaCity();
-    await loadWeather(location.city, true);
-    weatherElements.location.title = location.displayName || location.region || '';
-  } catch (error) {
-    weatherElements.description.textContent = '自动定位失败';
-    console.error('Location lookup failed:', error);
-  } finally {
-    weatherElements.locate.disabled = false;
-  }
-}
-
-function mediaPosition(media) {
-  if (!media) return 0;
-  const elapsed = media.playing ? Date.now() - media.capturedAt : 0;
-  return Math.max(0, media.positionMs + elapsed);
-}
-
-function lyricAt(lyrics, positionMs) {
-  if (!Array.isArray(lyrics) || !lyrics.length) return '';
-  let low = 0;
-  let high = lyrics.length - 1;
-  let match = -1;
-  while (low <= high) {
-    const middle = Math.floor((low + high) / 2);
-    if (lyrics[middle].timeMs <= positionMs + 120) {
-      match = middle;
-      low = middle + 1;
-    } else {
-      high = middle - 1;
-    }
-  }
-  return match >= 0 ? lyrics[match].text : '';
-}
-
-let mediaState;
-let lyricsMode = 'auto';
-
-function updateMediaDisplay() {
-  if (document.hidden || lowResourceMode) return;
-  if (!mediaState) {
-    mediaElements.title.textContent = '等待播放器';
-    mediaElements.artist.textContent = '播放音乐后会自动读取 Windows 媒体会话';
-    mediaElements.lyric.textContent = '找到时间轴歌词后将同步到游戏悬浮条';
-    return;
-  }
-
-  mediaElements.title.textContent = mediaState.title || '未知曲目';
-  mediaElements.artist.textContent =
-    mediaState.artist ||
-    (mediaState.lyricsStatus === 'metadata-missing'
-      ? '播放器没有提供实际歌曲名或歌手'
-      : '未知艺术家');
-  mediaElements.lyric.textContent =
-    lyricAt(mediaState.lyrics, mediaPosition(mediaState)) ||
-    (mediaState.lyrics?.length
-      ? '♪'
-      : mediaState.lyricsStatus === 'loading'
-        ? '正在匹配同步歌词…'
-        : mediaState.lyricsStatus === 'disabled'
-          ? '当前歌词方式未启用在线匹配'
-        : mediaState.lyricsStatus === 'metadata-missing'
-          ? '无法自动识别，请在下方手动输入歌曲名'
-        : '未找到同步歌词');
-}
-
 function drawChart() {
   const canvas = elements.canvas;
   const rect = canvas.getBoundingClientRect();
@@ -760,9 +619,6 @@ elements.installUpdate.addEventListener('click', () => {
   renderUpdateStatus({ state: 'installing', message: '正在重启安装更新…' });
   window.desktop.installUpdate();
 });
-overlayControls.heartOnly.addEventListener('change', (event) => {
-  window.desktop.setOverlayHeartOnly(event.target.checked);
-});
 overlayControls.visible.addEventListener('change', (event) => {
   window.desktop.setOverlayVisible(event.target.checked);
 });
@@ -825,7 +681,6 @@ themeControls.preset.addEventListener('change', (event) => {
   themeControls.accent,
   themeControls.background,
   themeControls.text,
-  themeControls.lyric,
   themeControls.opacity,
   themeControls.radius,
   themeControls.fontScale
@@ -836,57 +691,13 @@ themeControls.preset.addEventListener('change', (event) => {
     publishTheme({ ...readThemeControls(), preset: 'custom' });
   });
 });
-weatherElements.form.addEventListener('submit', (event) => {
-  event.preventDefault();
-  loadWeather(weatherElements.city.value, true);
-});
-weatherElements.locate.addEventListener('click', locateWeather);
-mediaElements.form.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const title = mediaElements.searchTitle.value.trim();
-  if (!title) return;
-  mediaElements.lyric.textContent = '正在搜索同步歌词…';
-  try {
-    const result = await window.desktop.searchLyrics({
-      title,
-      artist: mediaElements.searchArtist.value.trim()
-    });
-    if (!result.found) mediaElements.lyric.textContent = result.reason;
-  } catch (error) {
-    mediaElements.lyric.textContent = '歌词服务暂时不可用';
-    console.error('Manual lyrics search failed:', error);
-  }
-});
-mediaElements.automatic.addEventListener('click', () => {
-  window.desktop.useAutomaticLyrics();
-});
-mediaElements.sodaDirectReconnect.addEventListener('click', () => {
-  mediaElements.sodaDirectStatus.textContent = '正在安装/重连汽水音乐…';
-  window.desktop.reconnectSodaDirect();
-});
-mediaElements.modeInputs.forEach((input) => {
-  input.addEventListener('change', () => {
-    if (!input.checked) return;
-    lyricsMode = input.value;
-    localStorage.setItem('lyricsMode', lyricsMode);
-    window.desktop.setLyricsMode(lyricsMode);
-    mediaElements.sodaDirectStatus.textContent =
-      lyricsMode === 'online'
-        ? '当前仅使用在线歌词'
-        : lyricsMode === 'soda'
-          ? '当前仅使用汽水音乐播放器直读'
-          : '自动模式：汽水直读优先，在线歌词备用';
-    updateMediaDisplay();
-  });
-});
-mediaElements.sodaAutoHide.addEventListener('change', (event) => {
-  localStorage.setItem('sodaAutoHide', String(event.target.checked));
-  window.desktop.setSodaAutoHide(event.target.checked);
-});
-
 window.desktop.onBluetoothDevices(renderDeviceList);
 window.desktop.onAppSettings((settings) => {
   elements.autoStart.checked = settings.autoStart;
+  elements.autoStart.disabled = settings.autoStartSupported === false;
+  elements.autoStart.title = settings.autoStartSupported === false
+    ? '当前平台不支持开机启动'
+    : '';
 });
 window.desktop.onUpdateStatus(renderUpdateStatus);
 window.desktop.onTrayHeartRateReconnect(reconnectFromTray);
@@ -894,74 +705,20 @@ window.desktop.onOverlaySettings((settings) => {
   const wasLowResourceMode = lowResourceMode;
   lowResourceMode = settings.gameMode;
   overlayControls.visible.checked = settings.visible;
-  overlayControls.heartOnly.checked = Boolean(settings.heartOnly);
   overlayControls.passthrough.checked = settings.passthrough;
   overlayControls.size.value = String(Math.round(settings.scale * 100));
   overlayControls.sizeValue.textContent = `${Math.round(settings.scale * 100)}%`;
   overlayControls.width.value = String(settings.width);
   overlayControls.widthValue.textContent = String(settings.width);
   overlayControls.gameMode.checked = settings.gameMode;
-  if (wasLowResourceMode !== lowResourceMode) scheduleMediaDisplay();
   syncThemeControls(settings.theme || currentTheme);
-  lyricsMode = settings.lyricsMode || (settings.lyricsDirectEnabled ? 'auto' : 'online');
-  for (const input of mediaElements.modeInputs) input.checked = input.value === lyricsMode;
-  if (wasLowResourceMode && !lowResourceMode) {
-    drawChart();
-    updateMediaDisplay();
-  }
-});
-window.desktop.onMediaState((media) => {
-  mediaState = media;
-  updateMediaDisplay();
-});
-window.desktop.onSodaDirectStatus((status) => {
-  mediaElements.sodaDirectStatus.textContent = status;
+  if (wasLowResourceMode && !lowResourceMode) drawChart();
 });
 window.desktop.onGameState(renderGameState);
 window.addEventListener('resize', drawChart);
 syncHeartZoneControls();
 drawChart();
 
-const storedWeatherCity = localStorage.getItem('weatherCity') || '香港';
-if (hasMojibake(storedWeatherCity)) localStorage.removeItem('weatherCity');
-const savedWeatherCity = hasMojibake(storedWeatherCity) ? '北京' : storedWeatherCity;
-weatherElements.city.value = savedWeatherCity;
-loadWeather(savedWeatherCity);
-setInterval(() => loadWeather(weatherElements.city.value), 15 * 60 * 1000);
-
-let mediaDisplayTimer;
-function scheduleMediaDisplay() {
-  clearTimeout(mediaDisplayTimer);
-  if (document.hidden) return;
-  mediaDisplayTimer = setTimeout(() => {
-    updateMediaDisplay();
-    scheduleMediaDisplay();
-  }, lowResourceMode ? 1000 : 500);
-}
-document.addEventListener('visibilitychange', scheduleMediaDisplay);
-scheduleMediaDisplay();
-
 const savedGameMode = localStorage.getItem('gameMode') === 'true';
 overlayControls.gameMode.checked = savedGameMode;
 window.desktop.setGameMode(savedGameMode);
-
-const savedLyricsDirectValue = localStorage.getItem('lyricsDirect');
-const savedLyricsMode = localStorage.getItem('lyricsMode');
-const savedLyricsDirect =
-  savedLyricsDirectValue === null
-    ? (
-        localStorage.getItem('lyricsCdp') === 'true' ||
-        localStorage.getItem('lyricsCapture') === 'true'
-      )
-    : savedLyricsDirectValue === 'true';
-lyricsMode = ['auto', 'soda', 'online'].includes(savedLyricsMode)
-  ? savedLyricsMode
-  : savedLyricsDirect
-    ? 'auto'
-    : 'online';
-for (const input of mediaElements.modeInputs) input.checked = input.value === lyricsMode;
-window.desktop.setLyricsMode(lyricsMode);
-
-const savedSodaAutoHide = localStorage.getItem('sodaAutoHide') === 'true';
-mediaElements.sodaAutoHide.checked = savedSodaAutoHide;
-window.desktop.setSodaAutoHide(savedSodaAutoHide);

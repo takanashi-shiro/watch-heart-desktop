@@ -27,20 +27,11 @@ contextBridge.exposeInMainWorld('desktop', {
   setOverlayScale: (scale) => ipcRenderer.send('overlay-scale', scale),
   setOverlayWidth: (width) => ipcRenderer.send('overlay-width', width),
   setOverlayTheme: (theme) => ipcRenderer.send('overlay-theme', theme),
-  setOverlayHeartOnly: (enabled) => ipcRenderer.send('overlay-heart-only', enabled),
   setOverlayPassthrough: (enabled) => ipcRenderer.send('overlay-passthrough', enabled),
   updateHeartRate: (state) => ipcRenderer.send('heart-rate-update', state),
-  updateWeather: (weather) => ipcRenderer.send('weather-update', weather),
   onOverlaySettings: (handler) => {
     ipcRenderer.on('overlay-settings', (_event, settings) => handler(settings));
   },
-  getChinaWeather: (city) => ipcRenderer.invoke('china-weather', city),
-  locateChinaCity: () => ipcRenderer.invoke('china-ip-location'),
-  onMediaState: (handler) => {
-    ipcRenderer.on('media-state', (_event, media) => handler(media));
-  },
-  searchLyrics: (query) => ipcRenderer.invoke('lyrics-search', query),
-  useAutomaticLyrics: () => ipcRenderer.send('lyrics-auto-mode'),
   setGameMode: (enabled) => ipcRenderer.send('game-mode', enabled),
   setGameDetectionSettings: (settings) => {
     ipcRenderer.send('game-detection-settings', settings);
@@ -50,12 +41,5 @@ contextBridge.exposeInMainWorld('desktop', {
   clearGameSessions: () => ipcRenderer.send('game-clear-sessions'),
   onGameState: (handler) => {
     ipcRenderer.on('game-state', (_event, state) => handler(state));
-  },
-  setSodaDirectEnabled: (enabled) => ipcRenderer.send('soda-direct-toggle', enabled),
-  setLyricsMode: (mode) => ipcRenderer.send('lyrics-mode', mode),
-  reconnectSodaDirect: () => ipcRenderer.send('soda-direct-reconnect'),
-  setSodaAutoHide: (enabled) => ipcRenderer.send('soda-auto-hide', enabled),
-  onSodaDirectStatus: (handler) => {
-    ipcRenderer.on('soda-direct-status', (_event, status) => handler(status));
   }
 });

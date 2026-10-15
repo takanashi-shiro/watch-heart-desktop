@@ -13,9 +13,6 @@ contextBridge.exposeInMainWorld('overlay', {
   setPassthrough: (enabled) => {
     ipcRenderer.send('overlay-passthrough', enabled);
   },
-  setHeartOnly: (enabled) => {
-    ipcRenderer.send('overlay-heart-only', enabled);
-  },
   setControlsInteractive: (interactive) => {
     ipcRenderer.send('overlay-interactive-region', interactive);
   },

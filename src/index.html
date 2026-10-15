@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self'; script-src 'self'"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'"
     >
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Watch Heart</title>
@@ -41,28 +41,28 @@
         <h2>多用户心率</h2>
         <div class="connection-type-selector">
           <label>
-            <input type="radio" name="connection-type" value="direct" checked>
+            <input type="radio" name="connection-type" value="direct">
             直连（局域网）
           </label>
           <label>
-            <input type="radio" name="connection-type" value="relay">
+            <input type="radio" name="connection-type" value="relay" checked>
             通过中继服务器
           </label>
         </div>
         <form id="remote-connect-form" class="remote-connect-form">
-          <div class="direct-connection-fields">
+          <div class="direct-connection-fields hidden">
             <input id="remote-address" placeholder="IPv4 / IPv6，例如 192.168.1.20" aria-label="远程 IP 地址" maxlength="100">
           </div>
-          <div class="relay-connection-fields" style="display:none;">
-            <input id="relay-server" placeholder="中继服务器地址，例如 ws://server:32124" aria-label="中继服务器地址" maxlength="200" required>
-            <input id="relay-room" placeholder="房间 ID" aria-label="房间 ID" maxlength="50" required>
+          <div class="relay-connection-fields">
+            <input id="relay-server" value="ws://111.229.172.195:32124" placeholder="中继服务器地址" aria-label="中继服务器地址" maxlength="200" required>
+            <input id="relay-room" placeholder="房间 ID，例如 family" aria-label="房间 ID" maxlength="64" required>
           </div>
           <input id="remote-name" placeholder="用户名（可选）" aria-label="新用户名称" maxlength="40">
-          <button id="remote-connect" type="submit" class="primary-button">连接并添加用户</button>
+          <button id="remote-connect" type="submit" class="primary-button">加入房间</button>
         </form>
-          <div id="relay-status" class="relay-status"><span id="relay-status-text">中继服务器: 未连接</span><button id="relay-toggle" class="secondary-button">连接</button></div>
+          <div id="relay-status" class="relay-status"><span id="relay-status-text">中继房间: 未连接</span><button id="relay-toggle" class="secondary-button" disabled>连接</button></div>
 
-        <p>对方需运行支持远程功能的本程序并开启共享。IPv6 可直接输入，指定端口请用 [IPv6]:端口。勾选要显示的用户，主界面与悬浮窗同步；用户名可直接修改。共享每次启动默认关闭。</p>
+        <p>中继模式下，同一服务器和房间 ID 的客户端会自动互相发现并显示房间内所有用户的心率。直连模式用于局域网 IPv4 / IPv6，指定端口请用 [IPv6]:端口。勾选要显示的用户后，主界面与悬浮窗会同步显示。</p>
         <p id="remote-message" role="status" aria-live="polite"></p>
         <div id="remote-user-list" class="remote-user-list"></div>
         <div id="selected-heart-rates" class="selected-heart-rates" aria-label="选中用户的心率"></div>
@@ -76,10 +76,6 @@
         <label class="switch-control">
           <input id="overlay-visible" type="checkbox">
           <span>显示</span>
-        </label>
-        <label class="switch-control">
-          <input id="overlay-heart-only" type="checkbox">
-          <span>仅显示心率</span>
         </label>
         <label class="range-control">
           <span>缩放</span>
@@ -101,8 +97,8 @@
         </label>
       </section>
 
-      <section class="theme-card">
-        <div class="game-profile-heading">
+      <section id="game-detection-panel" class="theme-card">
+        <div class="game-profile-heading>
           <div>
             <strong>游戏自动识别与场次统计</strong>
             <span id="active-game-status">当前未检测到游戏</span>
@@ -144,7 +140,6 @@
           <label><span>强调色</span><input id="theme-accent" type="color" value="#ff315d"></label>
           <label><span>背景</span><input id="theme-background" type="color" value="#0a0c12"></label>
           <label><span>文字</span><input id="theme-text" type="color" value="#f7f8fb"></label>
-          <label><span>歌词</span><input id="theme-lyric" type="color" value="#e8eaf0"></label>
           <label class="range-control"><span>透明度</span><input id="theme-opacity" type="range" min="0" max="100" value="88"><output id="theme-opacity-value">88%</output></label>
           <label class="range-control"><span>圆角</span><input id="theme-radius" type="range" min="8" max="30" value="18"><output id="theme-radius-value">18</output></label>
           <label class="range-control"><span>字体</span><input id="theme-font-scale" type="range" min="80" max="130" value="100"><output id="theme-font-scale-value">100%</output></label>
@@ -208,60 +203,8 @@
         </article>
       </section>
 
-      <section class="weather-card">
-        <div class="weather-current">
-          <span id="weather-icon" class="large-weather-icon">◌</span>
-          <div>
-            <span class="eyebrow">当前天气</span>
-            <div class="weather-temperature">
-              <strong id="weather-temperature">--°</strong>
-              <span id="weather-description">正在获取天气</span>
-            </div>
-          </div>
-        </div>
-        <div class="weather-details">
-          <div><span>体感</span><strong id="weather-feels-like">--°</strong></div>
-          <div><span>风速</span><strong id="weather-wind">-- km/h</strong></div>
-          <div><span>位置</span><strong id="weather-location">香港</strong></div>
-        </div>
-        <form id="weather-form" class="weather-search">
-          <input id="weather-city" type="text" value="香港" maxlength="40" aria-label="天气城市">
-          <button type="submit" class="secondary-button">更新城市</button>
-          <button id="weather-locate" type="button" class="secondary-button">自动定位</button>
-        </form>
-      </section>
-
-      <section class="music-card">
-        <div class="music-icon">♫</div>
-        <div class="music-copy">
-          <span class="eyebrow">当前媒体与同步歌词</span>
-          <strong id="music-title">等待播放器</strong>
-          <span id="music-artist">播放音乐后会自动读取 Windows 媒体会话</span>
-        </div>
-        <div id="music-lyric" class="music-lyric">找到时间轴歌词后将同步到游戏悬浮条</div>
-        <form id="lyrics-form" class="lyrics-form">
-          <input id="lyrics-title" type="text" maxlength="200" placeholder="歌曲名" aria-label="歌词歌曲名">
-          <input id="lyrics-artist" type="text" maxlength="200" placeholder="歌手（可选）" aria-label="歌词歌手">
-          <button type="submit" class="secondary-button">手动匹配</button>
-          <button id="lyrics-auto" type="button" class="secondary-button">恢复自动</button>
-        </form>
-        <div class="capture-lyrics-control">
-          <div class="lyrics-mode-control" role="radiogroup" aria-label="歌词读取方式">
-            <label><input type="radio" name="lyrics-mode" value="auto"> <span>自动：汽水直读优先，在线备用</span></label>
-            <label><input type="radio" name="lyrics-mode" value="soda"> <span>仅汽水直读</span></label>
-            <label><input type="radio" name="lyrics-mode" value="online"> <span>仅在线匹配</span></label>
-          </div>
-          <label class="switch-control">
-            <input id="lyrics-auto-hide" type="checkbox">
-            <span>自动隐藏汽水桌面歌词</span>
-          </label>
-          <button id="lyrics-direct-reconnect" type="button" class="secondary-button">安装/重连</button>
-          <span id="lyrics-direct-status">未开启</span>
-        </div>
-      </section>
-
       <footer>
-        请开启手表、心率带、臂带或手机 App 的标准 BLE 心率广播。鼠标穿透后按 Ctrl+Shift+L 可恢复操作。天气已切换为中国大陆天气源。
+        请开启手表、心率带、臂带或手机 App 的标准 BLE 心率广播。鼠标穿透后按 Ctrl+Shift+L 可恢复操作。
       </footer>
     </main>
 
@@ -277,6 +220,7 @@
       </div>
     </div>
 
+    <script src="./web-bridge.js"></script>
     <script src="./renderer.js"></script>
     <script src="./remote-users.js"></script>
   </body>

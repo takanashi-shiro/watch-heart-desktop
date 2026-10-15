@@ -578,226 +578,6 @@ button:disabled {
   font-size: 10px;
 }
 
-.weather-card {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 28px;
-  margin-top: 18px;
-  padding: 20px 24px;
-  border: 1px solid rgba(255, 255, 255, 0.075);
-  border-radius: 20px;
-  background: rgba(18, 21, 29, 0.76);
-}
-
-.weather-current,
-.weather-temperature,
-.weather-details,
-.weather-search {
-  display: flex;
-  align-items: center;
-}
-
-.weather-current {
-  gap: 15px;
-}
-
-.large-weather-icon {
-  display: grid;
-  width: 48px;
-  height: 48px;
-  place-items: center;
-  border-radius: 15px;
-  background: rgba(255, 187, 76, 0.12);
-  color: #ffc15b;
-  font-size: 28px;
-}
-
-.weather-temperature {
-  gap: 10px;
-  margin-top: 3px;
-}
-
-.weather-temperature strong {
-  font-size: 27px;
-}
-
-.weather-temperature span {
-  max-width: 100px;
-  color: #858ea0;
-  font-size: 12px;
-}
-
-.weather-details {
-  justify-content: center;
-  gap: 30px;
-}
-
-.weather-details div {
-  display: grid;
-  gap: 3px;
-}
-
-.weather-details span {
-  color: #697286;
-  font-size: 10px;
-}
-
-.weather-details strong {
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.weather-search {
-  gap: 8px;
-}
-
-.weather-search input {
-  width: 110px;
-  height: 40px;
-  padding: 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 11px;
-  outline: none;
-  background: #0f1219;
-  color: #edf0f6;
-}
-
-.music-card {
-  display: grid;
-  grid-template-columns: auto minmax(180px, 0.75fr) minmax(260px, 1.25fr);
-  align-items: center;
-  gap: 16px;
-  margin-top: 14px;
-  padding: 16px 20px;
-  border: 1px solid rgba(255, 255, 255, 0.075);
-  border-radius: 18px;
-  background: rgba(18, 21, 29, 0.7);
-}
-
-.lyrics-form {
-  display: flex;
-  grid-column: 1 / -1;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.lyrics-form input {
-  width: min(190px, 24vw);
-  height: 36px;
-  padding: 0 11px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 10px;
-  outline: none;
-  background: #0f1219;
-  color: #edf0f6;
-}
-
-.lyrics-form input:focus {
-  border-color: rgba(158, 141, 255, 0.65);
-}
-
-.lyrics-form .secondary-button {
-  min-height: 36px;
-}
-
-.capture-lyrics-control {
-  display: flex;
-  grid-column: 1 / -1;
-  justify-content: flex-end;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.lyrics-mode-control {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.lyrics-mode-control label {
-  display: flex;
-  min-height: 32px;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.035);
-  color: #a5acba;
-  font-size: 12px;
-  user-select: none;
-}
-
-.lyrics-mode-control label:has(input:checked) {
-  border-color: rgba(255, 49, 93, 0.48);
-  background: rgba(255, 49, 93, 0.12);
-  color: #f4f6fb;
-}
-
-.lyrics-mode-control input {
-  accent-color: #ff315d;
-}
-
-#lyrics-direct-status {
-  color: #737c8f;
-  font-size: 11px;
-}
-
-.music-icon {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  border-radius: 13px;
-  background: rgba(112, 91, 255, 0.14);
-  color: #9e8dff;
-  font-size: 20px;
-}
-
-.music-copy {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.music-copy strong,
-.music-copy > span:last-child,
-.music-lyric {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.music-copy strong {
-  margin-top: 2px;
-  font-size: 14px;
-}
-
-.music-copy > span:last-child {
-  color: #737c8f;
-  font-size: 11px;
-}
-
-.music-lyric {
-  padding: 10px 13px;
-  border-radius: 11px;
-  background: rgba(255, 255, 255, 0.035);
-  color: #bec4d1;
-  font-size: 12px;
-  text-align: center;
-}
-
-.weather-search input:focus {
-  border-color: rgba(255, 49, 93, 0.55);
-}
-
-.weather-search .secondary-button {
-  min-height: 40px;
-}
-
 footer {
   margin-top: 16px;
   color: #676f80;
@@ -819,6 +599,12 @@ footer {
 .hidden {
   display: none;
 }
+
+.web-mode .topbar-controls,
+.web-mode #game-detection-panel {
+  display: none;
+}
+
 
 .modal-panel {
   width: min(460px, 100%);
@@ -937,26 +723,6 @@ footer {
     min-height: 430px;
   }
 
-  .weather-card {
-    grid-template-columns: 1fr;
-  }
-
-  .weather-details {
-    justify-content: flex-start;
-  }
-
-  .music-card {
-    grid-template-columns: auto 1fr;
-  }
-
-  .music-lyric {
-    grid-column: 1 / -1;
-  }
-
-  .lyrics-form {
-    flex-wrap: wrap;
-    justify-content: flex-start;
-  }
 }
 :root .remote-panel { margin-bottom: 18px; }
 .remote-panel h2 { margin-top: 0; }

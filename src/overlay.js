@@ -1,31 +1,21 @@
-const bpmElement = document.querySelector('#overlay-bpm');
-const heartElement = document.querySelector('#overlay-heart');
-const weatherIcon = document.querySelector('#overlay-weather-icon');
-const temperature = document.querySelector('#overlay-temperature');
-const weatherLabel = document.querySelector('#overlay-weather-label');
-const lyricElement = document.querySelector('#overlay-lyric');
+const usersElement = document.querySelector('#overlay-users');
 const lockButton = document.querySelector('#overlay-lock');
-const heartOnlyButton = document.querySelector('#overlay-heart-only');
 const controlsElement = document.querySelector('.overlay-controls');
 const zoneClasses = ['zone-low', 'zone-normal', 'zone-warm', 'zone-high', 'zone-danger'];
-let mediaState;
-let sodaLyric;
+
 let passthroughEnabled = false;
-let heartOnlyEnabled = false;
 let controlsInteractive = false;
-let displayedLyric = '';
-let sodaDirectEnabled = false;
-let lyricsMode = 'auto';
 let gameMode = false;
-let lyricTimer;
-let lastBpm = null;
-let lastZone = 'idle';
-let lastWeatherKey = '';
+let currentSettings = {};
+let currentUsers = [];
+let lastUsersKey = '';
+let lastWebWindowSize = '';
+
 const DEFAULT_THEME = {
+  preset: 'pulse',
   accent: '#ff315d',
   background: '#0a0c12',
   text: '#f7f8fb',
-  lyric: '#e8eaf0',
   opacity: 88,
   blur: 16,
   radius: 18,
@@ -33,175 +23,119 @@ const DEFAULT_THEME = {
 };
 
 function hexToRgb(hex) {
-  const match = /^#([0-9a-f]{6})$/i.exec(String(hex || ''));
-  if (!match) return [10, 12, 18];
-  const value = Number.parseInt(match[1], 16);
-  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  const value = String(hex || '').replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(value)) return '10, 12, 18';
+  return [
+    parseInt(value.slice(0, 2), 16),
+    parseInt(value.slice(2, 4), 16),
+    parseInt(value.slice(4, 6), 16)
+  ].join(', ');
 }
 
 function applyTheme(theme = {}) {
   const merged = { ...DEFAULT_THEME, ...theme };
-  const [r, g, b] = hexToRgb(merged.background);
-  const alpha = Math.min(1, Math.max(0, Number(merged.opacity) / 100));
-  document.body.classList.toggle('transparent-background', alpha === 0);
-  const root = document.documentElement.style;
-  root.setProperty('--overlay-accent', merged.accent);
-  root.setProperty('--overlay-bg', `rgba(${r}, ${g}, ${b}, ${alpha})`);
-  root.setProperty('--overlay-opacity', String(alpha));
-  root.setProperty('--overlay-text', merged.text);
-  root.setProperty('--overlay-lyric', merged.lyric);
-  root.setProperty('--overlay-blur', `${(Number(merged.blur) || 0) * alpha}px`);
-  root.setProperty('--overlay-radius', `${Number(merged.radius) || 18}px`);
-  root.setProperty('--overlay-font-scale', `${Number(merged.fontScale) || 100}%`);
+  const root = document.documentElement;
+  root.style.setProperty('--overlay-accent', merged.accent);
+  root.style.setProperty('--overlay-bg-rgb', hexToRgb(merged.background));
+  root.style.setProperty('--overlay-text', merged.text);
+  root.style.setProperty('--overlay-opacity', String((merged.opacity ?? 88) / 100));
+  root.style.setProperty('--overlay-radius', `${merged.radius ?? 18}px`);
+  root.style.setProperty('--overlay-font-scale', String((merged.fontScale ?? 100) / 100));
 }
 
 function applyHeartZone(level) {
-  if (level === lastZone) return;
-  lastZone = level;
-  document.body.classList.remove(...zoneClasses);
-  if (zoneClasses.includes(`zone-${level}`)) {
-    document.body.classList.add(`zone-${level}`);
+  for (const className of zoneClasses) document.body.classList.remove(className);
+  const normalized = String(level || 'idle').toLowerCase();
+  const className = zoneClasses.find((name) => name.endsWith(normalized));
+  if (className) document.body.classList.add(className);
+}
+
+function resizeWebWindow(width, height) {
+  const sizeKey = `${width}x${height}`;
+  if (sizeKey === lastWebWindowSize) return;
+  lastWebWindowSize = sizeKey;
+  requestAnimationFrame(() => {
+    try {
+      const deltaWidth = width - window.innerWidth;
+      const deltaHeight = height - window.innerHeight;
+      if (deltaWidth || deltaHeight) window.resizeBy(deltaWidth, deltaHeight);
+    } catch {}
+  });
+}
+
+function applyWebLayout() {
+  if (!document.documentElement.classList.contains('web-overlay')) return;
+  const scale = Math.min(2, Math.max(0.5, Number(currentSettings.scale) || 1));
+  const width = Math.min(1000, Math.max(50, Number(currentSettings.width) || 580));
+  const userCount = Math.max(1, currentUsers.length);
+  const rowCount = Math.max(1, Math.ceil(userCount / 3));
+  const contentHeight = 112 + (rowCount - 1) * 64;
+  const root = document.documentElement;
+  root.style.setProperty('--overlay-width', `${width}px`);
+  root.style.setProperty('--overlay-scale', String(scale));
+  root.style.setProperty('--overlay-user-count', String(userCount));
+  root.style.setProperty('--overlay-content-height', `${contentHeight}px`);
+  root.style.setProperty('--overlay-scaled-width', `${Math.round(width * scale)}px`);
+  root.style.setProperty('--overlay-scaled-height', `${Math.round(contentHeight * scale)}px`);
+  resizeWebWindow(Math.round(width * scale), Math.round(contentHeight * scale));
+}
+
+function renderUsers(users, state = {}) {
+  const normalized = Array.isArray(users) && users.length
+    ? users
+    : [{
+        id: 'local',
+        name: '本机',
+        connected: Boolean(state.connected),
+        bpm: state.bpm == null ? null : Number(state.bpm)
+      }];
+  const key = JSON.stringify(normalized.map(({ id, name, connected, bpm }) => ({ id, name, connected, bpm })));
+  if (key === lastUsersKey) return;
+  lastUsersKey = key;
+  currentUsers = normalized;
+  usersElement.replaceChildren();
+
+  for (const user of normalized) {
+    const card = document.createElement('div');
+    card.className = `overlay-user${user.connected && user.bpm ? ' active' : ''}`;
+
+    const bpm = document.createElement('strong');
+    bpm.className = 'overlay-user-bpm';
+    bpm.textContent = user.connected && user.bpm ? String(user.bpm) : '--';
+
+    const name = document.createElement('span');
+    name.className = 'overlay-user-name';
+    name.textContent = user.name || '用户';
+    name.title = user.name || '用户';
+
+    card.append(bpm, name);
+    usersElement.append(card);
   }
-}
-
-function mediaPosition(media) {
-  if (!media) return 0;
-  return Math.max(
-    0,
-    media.positionMs + (media.playing ? Date.now() - media.capturedAt : 0)
-  );
-}
-
-function lyricAt(lyrics, positionMs) {
-  if (!Array.isArray(lyrics) || !lyrics.length) return '';
-  let low = 0;
-  let high = lyrics.length - 1;
-  let match = -1;
-  while (low <= high) {
-    const middle = Math.floor((low + high) / 2);
-    if (lyrics[middle].timeMs <= positionMs + 120) {
-      match = middle;
-      low = middle + 1;
-    } else {
-      high = middle - 1;
-    }
-  }
-  return match >= 0 ? lyrics[match].text : '';
-}
-
-function updateLyrics() {
-  let text;
-  if (sodaDirectEnabled && sodaLyric?.text) {
-    text = sodaLyric.text;
-  } else if (!mediaState) {
-    text = '播放音乐后显示同步歌词';
-  } else {
-    text =
-      lyricAt(mediaState.lyrics, mediaPosition(mediaState)) ||
-      (mediaState.lyrics?.length
-        ? '♪'
-        : mediaState.lyricsStatus === 'loading'
-          ? '正在匹配歌词…'
-          : mediaState.lyricsStatus === 'disabled'
-            ? lyricsMode === 'soda'
-              ? '等待汽水音乐直读歌词'
-              : '在线歌词未启用'
-          : mediaState.lyricsStatus === 'metadata-missing'
-            ? '播放器未提供歌曲信息'
-            : '未找到同步歌词');
-  }
-  if (text === displayedLyric) return;
-  displayedLyric = text;
-  lyricElement.textContent = text;
-  lyricElement.title = text;
-  lyricElement.style.fontSize =
-    text.length > 34 ? '10px' : text.length > 22 ? '11px' : '';
-}
-
-function scheduleLyrics() {
-  clearTimeout(lyricTimer);
-  if (document.hidden) return;
-  lyricTimer = setTimeout(() => {
-    updateLyrics();
-    scheduleLyrics();
-  }, gameMode ? 500 : 250);
+  applyWebLayout();
 }
 
 function updateHeartRate(state) {
-  if (Array.isArray(state.users)) {
-    const usersElement = document.querySelector('#overlay-users');
-    usersElement.hidden = false;
-    document.querySelector('.heart-section').hidden = true;
-    const key = JSON.stringify(state.users.map(({ id, name, connected, bpm }) => ({ id, name, connected, bpm })));
-    if (usersElement.dataset.state !== key) {
-      usersElement.dataset.state = key;
-      usersElement.replaceChildren();
-      for (const user of state.users) {
-        const card = document.createElement('div');
-        card.className = 'overlay-user';
-        const bpm = user.connected && user.bpm ? Number(user.bpm) : null;
-        const value = document.createElement('strong');
-        value.textContent = bpm ? String(bpm) : '--';
-        const name = document.createElement('span');
-        name.textContent = user.name;
-        name.title = user.name;
-        card.append(value, name);
-        usersElement.append(card);
-      }
-      if (!state.users.length) usersElement.textContent = '未选择用户';
-    }
-    return;
-  }
-  const bpm = state.connected && state.bpm ? Number(state.bpm) : null;
-  if (bpm === lastBpm) return;
-  lastBpm = bpm;
-  if (bpm) {
-    bpmElement.textContent = String(bpm);
-    heartElement.classList.add('active');
-    heartElement.style.setProperty('--beat-duration', `${Math.max(0.28, 60 / bpm)}s`);
-  } else {
-    bpmElement.textContent = '--';
-    heartElement.classList.remove('active');
-  }
-}
-
-function updateWeather(weather) {
-  if (!weather) return;
-  const key = `${weather.icon}|${weather.temperature}|${weather.city}|${weather.label}`;
-  if (key === lastWeatherKey) return;
-  lastWeatherKey = key;
-  weatherIcon.textContent = weather.icon;
-  temperature.textContent = `${Math.round(weather.temperature)}°`;
-  weatherLabel.textContent = `${weather.city} · ${weather.label}`;
+  renderUsers(state.users, state);
+  applyHeartZone(state.users && state.users.length > 1 ? 'idle' : state.zoneLevel || 'idle');
 }
 
 window.overlay.onState((state) => {
-  const showsOnlyLocal = !state.users || (state.users.length === 1 && state.users[0].id === 'local');
-  applyHeartZone(showsOnlyLocal ? state.zoneLevel || 'idle' : 'idle');
   updateHeartRate(state);
-  updateWeather(state.weather);
-  mediaState = state.media;
-  sodaLyric = state.sodaLyric;
-  updateLyrics();
 });
 
 window.overlay.onSettings((settings) => {
-  heartOnlyEnabled = Boolean(settings.heartOnly);
-  document.body.classList.toggle('heart-only', heartOnlyEnabled);
-  heartOnlyButton.classList.toggle('active', heartOnlyEnabled);
-  heartOnlyButton.setAttribute('aria-pressed', String(heartOnlyEnabled));
-  heartOnlyButton.title = heartOnlyEnabled ? '显示全部内容' : '仅显示心率';
-  passthroughEnabled = settings.passthrough;
+  currentSettings = settings;
+  applyWebLayout();
+
+  passthroughEnabled = Boolean(settings.passthrough);
   if (!passthroughEnabled) controlsInteractive = false;
-  lockButton.classList.toggle('active', settings.passthrough);
-  lockButton.title = settings.passthrough ? '取消鼠标穿透' : '开启鼠标穿透';
+  lockButton.classList.toggle('active', passthroughEnabled);
+  lockButton.setAttribute('aria-pressed', String(passthroughEnabled));
+  lockButton.title = passthroughEnabled ? '取消鼠标穿透' : '开启鼠标穿透';
+
   gameMode = Boolean(settings.gameMode);
   document.body.classList.toggle('game-mode', gameMode);
   applyTheme(settings.theme);
-  lyricsMode = settings.lyricsMode || (settings.lyricsDirectEnabled ? 'auto' : 'online');
-  sodaDirectEnabled = lyricsMode !== 'online';
-  updateLyrics();
-  scheduleLyrics();
 });
 
 document.querySelector('#overlay-smaller').addEventListener('click', () => {
@@ -210,18 +144,12 @@ document.querySelector('#overlay-smaller').addEventListener('click', () => {
 document.querySelector('#overlay-larger').addEventListener('click', () => {
   window.overlay.resizeStep(1);
 });
-heartOnlyButton.addEventListener('click', () => {
-  window.overlay.setHeartOnly(!heartOnlyEnabled);
-});
 lockButton.addEventListener('click', () => {
   window.overlay.setPassthrough(!passthroughEnabled);
 });
 document.querySelector('#overlay-close').addEventListener('click', () => {
   window.overlay.close();
 });
-
-document.addEventListener('visibilitychange', scheduleLyrics);
-scheduleLyrics();
 
 document.addEventListener('mousemove', (event) => {
   if (!passthroughEnabled) return;

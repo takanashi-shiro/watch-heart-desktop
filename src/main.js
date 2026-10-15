@@ -15,25 +15,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { autoUpdater } = require('electron-updater');
 
-if (app.isPackaged) {
-  process.env.WINDOWS_MEDIA_SESSIONS_BACKEND = path.join(
-    process.resourcesPath,
-    'app.asar.unpacked',
-    'node_modules',
-    'windows-media-sessions',
-    'bin',
-    'win-x64',
-    'windows-media-sessions-backend.exe'
-  );
-}
-
-const {
-  searchSyncedLyrics,
-  setOnlineLyricsEnabled,
-  startMediaMonitor,
-  stopMediaMonitor
-} = require('./media-service');
-const { SodaLyricsDirectService } = require('./soda-lyrics-service');
 const { GameService } = require('./game-service');
 const { RemoteHeartService } = require('./remote-heart-service');
 let remoteHeart;
@@ -52,7 +33,6 @@ let discoveredDevices = new Map();
 let isQuitting = false;
 let overlayScale = 1;
 let overlayWidth = 580;
-let overlayHeartOnly = false;
 let overlayPassthrough = false;
 let overlayPosition;
 let settingsSaveTimer;
@@ -60,10 +40,6 @@ let overlayDestroyTimer;
 let unlockShortcuts = [];
 let overlayTheme = createDefaultOverlayTheme();
 let gameMode = false;
-let lyricsMode = 'auto';
-let automaticMediaState = null;
-let manualLyricsOverride = null;
-let sodaLyricsDirect;
 let initialLaunchHidden = process.argv.includes('--hidden');
 let updaterReady = false;
 let gameService;
@@ -72,7 +48,7 @@ const OVERLAY_MIN_SCALE = 0.5;
 const OVERLAY_MAX_SCALE = 2;
 const OVERLAY_MIN_WIDTH = 50;
 const OVERLAY_MAX_WIDTH = 1000;
-const OVERLAY_BASE_HEIGHT = 96;
+const OVERLAY_BASE_HEIGHT = 112;
 const OVERLAY_THEMES = new Set([
   'pulse',
   'neon',
@@ -81,14 +57,11 @@ const OVERLAY_THEMES = new Set([
   'minimal',
   'custom'
 ]);
-const LYRICS_MODES = new Set(['auto', 'soda', 'online']);
 let overlayState = {
   bpm: null,
   zone: '等待心率',
   connected: false,
-  weather: null,
-  media: null,
-  sodaLyric: null
+  users: []
 };
 
 function settingsPath() {
@@ -100,7 +73,6 @@ function overlayProfile() {
   return {
     scale: overlayScale,
     width: overlayWidth,
-    heartOnly: overlayHeartOnly,
     x: bounds?.x ?? overlayPosition?.x,
     y: bounds?.y ?? overlayPosition?.y,
     theme: overlayTheme,
@@ -118,7 +90,6 @@ function applyGameProfile(profile) {
   applyingGameProfile = true;
   setOverlayScale(profile.scale);
   setOverlayWidth(profile.width);
-  setOverlayHeartOnly(profile.heartOnly);
   setOverlayTheme(profile.theme);
   setGameMode(profile.gameMode);
   setOverlayPassthrough(profile.passthrough);
@@ -147,7 +118,6 @@ function createDefaultOverlayTheme() {
     accent: '#ff315d',
     background: '#0a0c12',
     text: '#f7f8fb',
-    lyric: '#e8eaf0',
     opacity: 88,
     blur: 16,
     radius: 18,
@@ -163,7 +133,6 @@ function normalizeOverlayTheme(theme) {
     accent: sanitizeHexColor(theme?.accent, defaults.accent),
     background: sanitizeHexColor(theme?.background, defaults.background),
     text: sanitizeHexColor(theme?.text, defaults.text),
-    lyric: sanitizeHexColor(theme?.lyric, defaults.lyric),
     opacity: clampNumber(theme?.opacity, 0, 100, defaults.opacity),
     blur: clampNumber(theme?.blur, 0, 28, defaults.blur),
     radius: clampNumber(theme?.radius, 8, 30, defaults.radius),
@@ -192,8 +161,6 @@ function loadOverlaySettings() {
       if (visible) overlayPosition = { x: saved.x, y: saved.y };
     }
     overlayTheme = normalizeOverlayTheme(saved.theme);
-    overlayHeartOnly = Boolean(saved.heartOnly);
-    if (LYRICS_MODES.has(saved.lyricsMode)) lyricsMode = saved.lyricsMode;
   } catch {
     // First launch or invalid settings: use safe defaults.
   }
@@ -206,11 +173,9 @@ function saveOverlaySettings() {
     const data = {
       scale: overlayScale,
       width: overlayWidth,
-      heartOnly: overlayHeartOnly,
       x: bounds?.x,
       y: bounds?.y,
-      theme: overlayTheme,
-      lyricsMode
+      theme: overlayTheme
     };
     fs.writeFile(settingsPath(), JSON.stringify(data), () => {});
   }, 250);
@@ -231,8 +196,12 @@ function showMainWindow() {
   mainWindow.focus();
 }
 
+function isAutoStartSupported() {
+  return ['win32', 'darwin'].includes(process.platform);
+}
+
 function isAutoStartEnabled() {
-  if (!app.isPackaged) return false;
+  if (!app.isPackaged || !isAutoStartSupported()) return false;
   return app.getLoginItemSettings({
     path: process.execPath,
     args: ['--hidden']
@@ -243,6 +212,7 @@ function sendAppSettings() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send('app-settings', {
     autoStart: isAutoStartEnabled(),
+    autoStartSupported: isAutoStartSupported(),
     trayAvailable: Boolean(tray)
   });
 }
@@ -268,91 +238,6 @@ function readableUpdateError(error) {
     return '网络连接失败，稍后再检查更新';
   }
   return `更新检查失败：${message.slice(0, 90)}`;
-}
-
-function looksMojibake(text) {
-  return /�|锟|�/.test(text) || (text.match(/�/g) || []).length >= 2;
-}
-
-async function readChinaResponseText(response) {
-  const buffer = Buffer.from(await response.arrayBuffer());
-  const contentType = response.headers.get('content-type') || '';
-  const charset = contentType.match(/charset=([^;]+)/i)?.[1]?.trim().toLowerCase();
-  const utf8 = new TextDecoder('utf-8').decode(buffer);
-  if (charset && /gbk|gb2312|gb18030/i.test(charset)) {
-    return new TextDecoder('gb18030').decode(buffer);
-  }
-  return looksMojibake(utf8)
-    ? new TextDecoder('gb18030').decode(buffer)
-    : utf8;
-}
-
-function weatherIconFor(label) {
-  if (/雷/.test(label)) return 'ϟ';
-  if (/雪|冰/.test(label)) return '❄';
-  if (/雨/.test(label)) return '🌧';
-  if (/云/.test(label)) return '◒';
-  if (/阴/.test(label)) return '☁';
-  if (/晴/.test(label)) return '☀';
-  return '◌';
-}
-
-function parseTemperatureRange(value) {
-  const numbers = String(value || '').match(/-?\d+(?:\.\d+)?/g)?.map(Number) || [];
-  if (!numbers.length) return { temperature: 0, text: '--°' };
-  const average = numbers.reduce((sum, item) => sum + item, 0) / numbers.length;
-  return {
-    temperature: average,
-    text: numbers.length >= 2 ? `${numbers[0]}~${numbers[1]}°` : `${numbers[0]}°`
-  };
-}
-
-async function fetchChinaWeather(city) {
-  const safeCity = String(city || '').trim().replace(/市$/, '').slice(0, 40);
-  if (!safeCity) throw new Error('请输入城市名');
-  const url = new URL('https://v.api.aa1.cn/api/api-tianqi-3/index.php');
-  url.search = new URLSearchParams({ msg: safeCity, type: '1' });
-  const response = await fetch(url, {
-    headers: { Accept: 'application/json,text/plain,*/*' },
-    signal: AbortSignal.timeout(10000)
-  });
-  if (!response.ok) throw new Error('国内天气接口暂时不可用');
-  const result = JSON.parse(await readChinaResponseText(response));
-  const today = Array.isArray(result?.data) ? result.data[0] : null;
-  if (!today) throw new Error('未找到该城市天气');
-  const label = String(today.tianqi || '天气未知').slice(0, 40);
-  const { temperature, text } = parseTemperatureRange(today.wendu);
-  const windSpeed = Number(String(today.fengdu || '').match(/\d+/)?.[0] || 0);
-  return {
-    city: safeCity,
-    region: '中国大陆天气源',
-    temperature,
-    temperatureText: text,
-    apparentTemperature: temperature,
-    windSpeed,
-    windText: String(today.fengdu || '').slice(0, 40),
-    label,
-    icon: weatherIconFor(label),
-    airQuality: String(today.pm || '').slice(0, 20)
-  };
-}
-
-async function locateChinaCityByIp() {
-  const response = await fetch('https://whois.pconline.com.cn/ipJson.jsp?json=true', {
-    headers: { Accept: 'application/json,text/plain,*/*' },
-    signal: AbortSignal.timeout(8000)
-  });
-  if (!response.ok) throw new Error('IP 定位失败');
-  const text = await readChinaResponseText(response);
-  const jsonText = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
-  const data = JSON.parse(jsonText);
-  const city = String(data.city || data.pro || '').replace(/市$/, '').trim();
-  if (!city) throw new Error('未能识别当前位置城市');
-  return {
-    city,
-    region: String(data.pro || '').trim(),
-    displayName: String(data.addr || '').trim()
-  };
 }
 
 function setupAutoUpdater() {
@@ -413,12 +298,16 @@ function checkForUpdates(manual = false) {
 }
 
 function setAutoStart(enabled) {
-  if (app.isPackaged) {
-    app.setLoginItemSettings({
-      openAtLogin: Boolean(enabled),
-      path: process.execPath,
-      args: ['--hidden']
-    });
+  if (app.isPackaged && isAutoStartSupported()) {
+    try {
+      app.setLoginItemSettings({
+        openAtLogin: Boolean(enabled),
+        path: process.execPath,
+        args: ['--hidden']
+      });
+    } catch (error) {
+      console.error('Auto-start setup failed:', error.message);
+    }
   }
   sendAppSettings();
   rebuildTrayMenu();
@@ -467,10 +356,12 @@ async function createTray() {
   let icon;
   try {
     icon = await app.getFileIcon(process.execPath, { size: 'small' });
-  } catch {
-    icon = nativeImage.createFromPath(process.execPath);
+  } catch {}
+  if (!icon || icon.isEmpty()) {
+    icon = nativeImage.createFromPath(path.join(__dirname, 'tray-icon.png'));
   }
-  tray = new Tray(icon.resize({ width: 16, height: 16 }));
+  if (!icon.isEmpty()) icon = icon.resize({ width: 16, height: 16 });
+  tray = new Tray(icon);
   tray.setToolTip('Watch Heart');
   tray.on('click', showMainWindow);
   tray.on('double-click', showMainWindow);
@@ -513,52 +404,14 @@ function sendOverlayState() {
   });
 }
 
-function publishMediaState(media) {
-  const sameTrack =
-    media &&
-    automaticMediaState &&
-    media.id === automaticMediaState.id &&
-    media.title === automaticMediaState.title &&
-    media.artist === automaticMediaState.artist;
-  automaticMediaState = media
-    ? {
-        ...(sameTrack ? automaticMediaState : {}),
-        ...media,
-        lyrics:
-          media.lyrics === undefined && sameTrack
-            ? automaticMediaState.lyrics
-            : media.lyrics
-      }
-    : null;
-  const effective =
-    automaticMediaState && manualLyricsOverride
-      ? {
-          ...automaticMediaState,
-          title: manualLyricsOverride.title,
-          artist: manualLyricsOverride.artist,
-          lyrics: manualLyricsOverride.lyrics,
-          lyricsStatus: 'found',
-          manualLyrics: true
-        }
-      : automaticMediaState;
-  overlayState.media = effective;
-  sendOverlayState();
-  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
-    mainWindow.webContents.send('media-state', effective);
-  }
-}
-
 function sendOverlaySettings() {
   const settings = {
     visible: Boolean(overlayWindow?.isVisible()),
     passthrough: overlayPassthrough,
-    heartOnly: overlayHeartOnly,
     scale: overlayScale,
     width: overlayWidth,
     unlockShortcuts,
     gameMode,
-    lyricsMode,
-    lyricsDirectEnabled: lyricsMode !== 'online',
     theme: overlayTheme
   };
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -570,25 +423,12 @@ function sendOverlaySettings() {
   rebuildTrayMenu();
 }
 
-function publishSodaLyric(lyric) {
-  overlayState.sodaLyric = lyric;
-  sendOverlayState();
-}
-
-function publishSodaDirectStatus(status) {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.webContents.send(
-    'soda-direct-status',
-    String(status || '').slice(0, 100)
-  );
-}
-
 function createOverlayWindow() {
   clearTimeout(overlayDestroyTimer);
   if (overlayWindow && !overlayWindow.isDestroyed()) return overlayWindow;
 
   overlayWindow = new BrowserWindow({
-    width: Math.round((overlayHeartOnly ? Math.min(280, overlayWidth) : overlayWidth) * overlayScale),
+    width: Math.round(overlayWidth * overlayScale),
     height: Math.round(OVERLAY_BASE_HEIGHT * overlayScale),
     minWidth: Math.round(OVERLAY_MIN_WIDTH * OVERLAY_MIN_SCALE),
     minHeight: Math.round(OVERLAY_BASE_HEIGHT * OVERLAY_MIN_SCALE),
@@ -668,7 +508,6 @@ function setOverlayControlsInteractive(interactive) {
 
 function setGameMode(enabled) {
   gameMode = Boolean(enabled);
-  sodaLyricsDirect?.setGameMode(gameMode);
   sendOverlaySettings();
   saveActiveGameProfile();
 }
@@ -698,16 +537,6 @@ function setOverlayWidth(width) {
   saveActiveGameProfile();
 }
 
-function setOverlayHeartOnly(enabled) {
-  overlayHeartOnly = Boolean(enabled);
-  if (overlayWindow && !overlayWindow.isDestroyed()) {
-    resizeOverlayWindow(overlayWindow);
-  }
-  saveOverlaySettings();
-  sendOverlaySettings();
-  saveActiveGameProfile();
-}
-
 function setOverlayTheme(theme) {
   overlayTheme = normalizeOverlayTheme({ ...overlayTheme, ...(theme || {}) });
   saveOverlaySettings();
@@ -715,27 +544,13 @@ function setOverlayTheme(theme) {
   saveActiveGameProfile();
 }
 
-function setLyricsMode(mode) {
-  lyricsMode = LYRICS_MODES.has(mode) ? mode : 'auto';
-  setOnlineLyricsEnabled(lyricsMode !== 'soda');
-  sodaLyricsDirect?.setEnabled(lyricsMode !== 'online');
-  if (lyricsMode === 'online') publishSodaLyric(null);
-  saveOverlaySettings();
-  sendOverlaySettings();
-  publishSodaDirectStatus(
-    lyricsMode === 'online'
-      ? '当前仅使用在线歌词'
-      : sodaLyricsDirect?.lastStatus || '未开启'
-  );
-}
-
 function resizeOverlayWindow(window) {
   const current = window.getBounds();
-  const width = Math.round((overlayHeartOnly ? Math.min(280, overlayWidth) : overlayWidth) * overlayScale);
+  const width = Math.round(overlayWidth * overlayScale);
   const userCount = typeof remoteHeart === 'undefined' ? 1 :
     (remoteHeart?.snapshot().users.filter((user) => user.selected).length || 1);
-  const narrowExtra = typeof remoteHeart !== 'undefined' && remoteHeart && overlayHeartOnly && overlayWidth <= 240 ? 36 : 0;
-  const height = Math.round((OVERLAY_BASE_HEIGHT + narrowExtra + Math.max(0, userCount - 1) * 64) * overlayScale);
+  const rowCount = Math.max(1, Math.ceil(userCount / 3));
+  const height = Math.round((OVERLAY_BASE_HEIGHT + (rowCount - 1) * 64) * overlayScale);
   const display = screen.getDisplayMatching(current);
   const area = display.workArea;
   const centeredX = current.x + Math.round((current.width - width) / 2);
@@ -803,14 +618,11 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
   mainWindow.webContents.once('did-finish-load', () => {
-    mainWindow.webContents.send('media-state', overlayState.media);
-    publishSodaDirectStatus(sodaLyricsDirect?.lastStatus || '未开启');
     sendOverlaySettings();
     sendAppSettings();
     gameService?.emit();
   });
   mainWindow.on('show', () => {
-    mainWindow.webContents.send('media-state', overlayState.media);
     sendOverlaySettings();
     gameService?.emit();
   });
@@ -932,10 +744,6 @@ app.whenReady().then(async () => {
     setOverlayTheme(theme);
   });
 
-  ipcMain.on('overlay-heart-only', (event, enabled) => {
-    if (!isMainSender(event) && !isOverlaySender(event)) return;
-    setOverlayHeartOnly(enabled);
-  });
 
   ipcMain.on('overlay-resize-step', (event, step) => {
     if (!isOverlaySender(event)) return;
@@ -977,26 +785,6 @@ app.whenReady().then(async () => {
     gameService.clearSessions();
   });
 
-  ipcMain.on('soda-direct-toggle', (event, enabled) => {
-    if (!isMainSender(event)) return;
-    setLyricsMode(Boolean(enabled) ? 'auto' : 'online');
-  });
-
-  ipcMain.on('lyrics-mode', (event, mode) => {
-    if (!isMainSender(event)) return;
-    setLyricsMode(String(mode || 'auto'));
-  });
-
-  ipcMain.on('soda-direct-reconnect', (event) => {
-    if (!isMainSender(event)) return;
-    sodaLyricsDirect?.reconnect();
-  });
-
-  ipcMain.on('soda-auto-hide', (event, enabled) => {
-    if (!isMainSender(event)) return;
-    sodaLyricsDirect?.setAutoHideDesktopLyrics(Boolean(enabled));
-  });
-
   ipcMain.on('overlay-close', (event) => {
     if (!isOverlaySender(event)) return;
     setOverlayVisible(false);
@@ -1023,63 +811,6 @@ app.whenReady().then(async () => {
     sendOverlayState();
   });
 
-  ipcMain.on('weather-update', (event, weather) => {
-    if (!isMainSender(event)) return;
-    if (!weather || !Number.isFinite(Number(weather.temperature))) return;
-    overlayState.weather = {
-      city: String(weather.city || '').slice(0, 80),
-      temperature: Number(weather.temperature),
-      apparentTemperature: Number(weather.apparentTemperature),
-      windSpeed: Number(weather.windSpeed),
-      label: String(weather.label || '').slice(0, 40),
-      icon: String(weather.icon || '').slice(0, 4)
-    };
-    sendOverlayState();
-  });
-
-  ipcMain.handle('china-weather', async (event, city) => {
-    if (!isMainSender(event)) throw new Error('Unauthorized sender');
-    return fetchChinaWeather(city);
-  });
-
-  ipcMain.handle('china-ip-location', async (event) => {
-    if (!isMainSender(event)) throw new Error('Unauthorized sender');
-    return locateChinaCityByIp();
-  });
-
-  ipcMain.handle('lyrics-search', async (event, query) => {
-    if (!isMainSender(event)) throw new Error('Unauthorized sender');
-    const title = String(query?.title || '').trim().slice(0, 200);
-    const artist = String(query?.artist || '').trim().slice(0, 200);
-    if (!title) return { found: false, reason: '请输入歌曲名' };
-
-    const lyrics = await searchSyncedLyrics({
-      title,
-      artist,
-      durationMs: automaticMediaState?.durationMs
-    });
-    if (!lyrics.length) return { found: false, reason: '未找到同步歌词' };
-
-    manualLyricsOverride = { title, artist, lyrics };
-    publishMediaState(automaticMediaState);
-    return { found: true, lines: lyrics.length };
-  });
-
-  ipcMain.on('lyrics-auto-mode', (event) => {
-    if (!isMainSender(event)) return;
-    manualLyricsOverride = null;
-    publishMediaState(automaticMediaState);
-  });
-
-  sodaLyricsDirect = new SodaLyricsDirectService({
-    onLyric: publishSodaLyric,
-    onStatus: publishSodaDirectStatus,
-    userDataPath: app.getPath('userData')
-  });
-  sodaLyricsDirect.setGameMode(gameMode);
-  setOnlineLyricsEnabled(lyricsMode !== 'soda');
-  sodaLyricsDirect.setEnabled(lyricsMode !== 'online');
-
   await createTray();
   createWindow();
   if (!gameService.data.defaultProfile) {
@@ -1089,12 +820,6 @@ app.whenReady().then(async () => {
   gameService.start();
   setupAutoUpdater();
   setTimeout(() => checkForUpdates(false), 5000);
-  startMediaMonitor((media) => {
-    publishMediaState(media);
-  }).catch((error) => {
-    console.error('Media monitor failed:', error.message);
-  });
-
   globalShortcut.register('CommandOrControl+Shift+H', () => {
     const shouldShow = !overlayWindow?.isVisible();
     setOverlayVisible(shouldShow);
@@ -1132,6 +857,4 @@ app.on('before-quit', () => {
   clearTimeout(settingsSaveTimer);
   clearTimeout(overlayDestroyTimer);
   gameService?.stop();
-  sodaLyricsDirect?.stop();
-  stopMediaMonitor();
 });

@@ -81,17 +81,36 @@ class GameService {
     return catalog;
   }
 
+  normalizeProcessExecutable(value) {
+    const executable = path.basename(String(value || '').trim()).toLowerCase();
+    if (!executable) return '';
+    return executable.endsWith('.exe') ? executable : `${executable}.exe`;
+  }
+
   async processes() {
-    const { stdout } = await execFileAsync('tasklist.exe', ['/FO', 'CSV', '/NH'], {
-      windowsHide: true,
+    const result = new Set();
+    if (process.platform === 'win32') {
+      const { stdout } = await execFileAsync('tasklist.exe', ['/FO', 'CSV', '/NH'], {
+        windowsHide: true,
+        encoding: 'utf8',
+        timeout: 5000,
+        maxBuffer: 2_000_000
+      });
+      for (const line of stdout.split(/\r?\n/)) {
+        const match = line.match(/^"([^"]+)"/);
+        if (match) result.add(this.normalizeProcessExecutable(match[1]));
+      }
+      return result;
+    }
+
+    const { stdout } = await execFileAsync('ps', ['-A', '-o', 'comm='], {
       encoding: 'utf8',
       timeout: 5000,
       maxBuffer: 2_000_000
     });
-    const result = new Set();
     for (const line of stdout.split(/\r?\n/)) {
-      const match = line.match(/^"([^"]+)"/);
-      if (match) result.add(match[1].toLowerCase());
+      const executable = this.normalizeProcessExecutable(line);
+      if (executable) result.add(executable);
     }
     return result;
   }
