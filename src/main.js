@@ -830,7 +830,7 @@ app.whenReady().then(async () => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('remote-users-state', state);
       if (overlayWindow && !overlayWindow.isDestroyed()) resizeOverlayWindow(overlayWindow);
       sendOverlayState();
-    }
+    },
     onConnectionRequest: function(address) { return new Promise(function(resolve) { var win = mainWindow; if (win && !win.isDestroyed()) { dialog.showMessageBox(win, { type: "info", title: "连接请求", message: "设备 " + address + " 请求连接", detail: "是否允许对方连接并查看你的心率？", buttons: ["接受并共享心率", "拒绝"], defaultId: 0, cancelId: 2 }).then(function(result) { resolve(result.response === 0 || result.response === 1); }).catch(function() { resolve(true); }); } else { resolve(true); } }); }
   });
   remoteHeart.start();
