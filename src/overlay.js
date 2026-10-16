@@ -50,6 +50,14 @@ function applyHeartZone(level) {
   if (className) document.body.classList.add(className);
 }
 
+function overlayContentHeight(userCount, fontScale) {
+  const normalizedUserCount = Math.max(1, Math.floor(Number(userCount) || 1));
+  const rowCount = Math.max(1, Math.ceil(normalizedUserCount / 3));
+  const normalizedFontScale = Math.min(1.3, Math.max(0.8, Number(fontScale) || 1));
+  const rowHeight = 59.25 + (rowCount - 1) * 77.25;
+  return Math.ceil(66 + rowHeight * normalizedFontScale);
+}
+
 function resizeWebWindow(width, height) {
   const sizeKey = `${width}x${height}`;
   if (sizeKey === lastWebWindowSize) return;
@@ -63,18 +71,20 @@ function resizeWebWindow(width, height) {
   });
 }
 
-function applyWebLayout() {
+function applyOverlayLayout() {
+  const userCount = Math.max(1, currentUsers.length);
+  const fontScale = Math.min(1.3, Math.max(0.8, Number(currentSettings.theme?.fontScale) / 100 || 1));
+  const contentHeight = overlayContentHeight(userCount, fontScale);
+  const root = document.documentElement;
+  root.style.setProperty('--overlay-user-count', String(userCount));
+  root.style.setProperty('--overlay-user-columns', `repeat(${Math.min(3, userCount)}, minmax(0, 1fr))`);
+  root.style.setProperty('--overlay-content-height', `${contentHeight}px`);
+
   if (!document.documentElement.classList.contains('web-overlay')) return;
   const scale = Math.min(2, Math.max(0.5, Number(currentSettings.scale) || 1));
   const width = Math.min(1000, Math.max(50, Number(currentSettings.width) || 580));
-  const userCount = Math.max(1, currentUsers.length);
-  const rowCount = Math.max(1, Math.ceil(userCount / 3));
-  const contentHeight = 112 + (rowCount - 1) * 64;
-  const root = document.documentElement;
   root.style.setProperty('--overlay-width', `${width}px`);
   root.style.setProperty('--overlay-scale', String(scale));
-  root.style.setProperty('--overlay-user-count', String(userCount));
-  root.style.setProperty('--overlay-content-height', `${contentHeight}px`);
   root.style.setProperty('--overlay-scaled-width', `${Math.round(width * scale)}px`);
   root.style.setProperty('--overlay-scaled-height', `${Math.round(contentHeight * scale)}px`);
   resizeWebWindow(Math.round(width * scale), Math.round(contentHeight * scale));
@@ -111,7 +121,7 @@ function renderUsers(users, state = {}) {
     card.append(bpm, name);
     usersElement.append(card);
   }
-  applyWebLayout();
+  applyOverlayLayout();
 }
 
 function updateHeartRate(state) {
@@ -125,7 +135,8 @@ window.overlay.onState((state) => {
 
 window.overlay.onSettings((settings) => {
   currentSettings = settings;
-  applyWebLayout();
+  applyTheme(settings.theme);
+  applyOverlayLayout();
 
   passthroughEnabled = Boolean(settings.passthrough);
   if (!passthroughEnabled) controlsInteractive = false;
@@ -135,7 +146,6 @@ window.overlay.onSettings((settings) => {
 
   gameMode = Boolean(settings.gameMode);
   document.body.classList.toggle('game-mode', gameMode);
-  applyTheme(settings.theme);
 });
 
 document.querySelector('#overlay-smaller').addEventListener('click', () => {

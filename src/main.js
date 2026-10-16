@@ -48,7 +48,9 @@ const OVERLAY_MIN_SCALE = 0.5;
 const OVERLAY_MAX_SCALE = 2;
 const OVERLAY_MIN_WIDTH = 50;
 const OVERLAY_MAX_WIDTH = 1000;
-const OVERLAY_BASE_HEIGHT = 112;
+const OVERLAY_CONTENT_CHROME_HEIGHT = 66;
+const OVERLAY_USER_ROW_HEIGHT = 59.25;
+const OVERLAY_USER_ROW_GAP = 18;
 const OVERLAY_THEMES = new Set([
   'pulse',
   'neon',
@@ -138,6 +140,15 @@ function normalizeOverlayTheme(theme) {
     radius: clampNumber(theme?.radius, 8, 30, defaults.radius),
     fontScale: clampNumber(theme?.fontScale, 80, 130, defaults.fontScale)
   };
+}
+
+function overlayContentHeight(userCount, fontScale = overlayTheme.fontScale) {
+  const normalizedUserCount = Math.max(1, Math.floor(Number(userCount) || 1));
+  const rowCount = Math.max(1, Math.ceil(normalizedUserCount / 3));
+  const normalizedFontScale = clampNumber(fontScale, 80, 130, 100) / 100;
+  const rowHeight = OVERLAY_USER_ROW_HEIGHT +
+    (rowCount - 1) * (OVERLAY_USER_ROW_HEIGHT + OVERLAY_USER_ROW_GAP);
+  return Math.ceil(OVERLAY_CONTENT_CHROME_HEIGHT + rowHeight * normalizedFontScale);
 }
 
 function loadOverlaySettings() {
@@ -429,9 +440,9 @@ function createOverlayWindow() {
 
   overlayWindow = new BrowserWindow({
     width: Math.round(overlayWidth * overlayScale),
-    height: Math.round(OVERLAY_BASE_HEIGHT * overlayScale),
+    height: Math.round(overlayContentHeight(1) * overlayScale),
     minWidth: Math.round(OVERLAY_MIN_WIDTH * OVERLAY_MIN_SCALE),
-    minHeight: Math.round(OVERLAY_BASE_HEIGHT * OVERLAY_MIN_SCALE),
+    minHeight: Math.round(overlayContentHeight(1, 80) * OVERLAY_MIN_SCALE),
     maxWidth: Math.round(OVERLAY_MAX_WIDTH * OVERLAY_MAX_SCALE),
     maxHeight: screen.getPrimaryDisplay().workArea.height,
     ...(overlayPosition || {}),
@@ -539,6 +550,7 @@ function setOverlayWidth(width) {
 
 function setOverlayTheme(theme) {
   overlayTheme = normalizeOverlayTheme({ ...overlayTheme, ...(theme || {}) });
+  resizeOverlayWindow(createOverlayWindow());
   saveOverlaySettings();
   sendOverlaySettings();
   saveActiveGameProfile();
@@ -549,8 +561,7 @@ function resizeOverlayWindow(window) {
   const width = Math.round(overlayWidth * overlayScale);
   const userCount = typeof remoteHeart === 'undefined' ? 1 :
     (remoteHeart?.snapshot().users.filter((user) => user.selected).length || 1);
-  const rowCount = Math.max(1, Math.ceil(userCount / 3));
-  const height = Math.round((OVERLAY_BASE_HEIGHT + (rowCount - 1) * 64) * overlayScale);
+  const height = Math.round(overlayContentHeight(userCount) * overlayScale);
   const display = screen.getDisplayMatching(current);
   const area = display.workArea;
   const centeredX = current.x + Math.round((current.width - width) / 2);

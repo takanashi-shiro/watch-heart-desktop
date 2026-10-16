@@ -26,9 +26,10 @@ body {
   --overlay-width: 580px;
   --overlay-scale: 1;
   --overlay-user-count: 1;
-  --overlay-content-height: 112px;
+  --overlay-user-columns: repeat(1, minmax(0, 1fr));
+  --overlay-content-height: 126px;
   --overlay-scaled-width: 580px;
-  --overlay-scaled-height: 112px;
+  --overlay-scaled-height: 126px;
 }
 
 .web-overlay,
@@ -82,7 +83,7 @@ body {
   background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.72);
   cursor: pointer;
-  font-size: 13px;
+  font-size: calc(13px * var(--overlay-font-scale));
 }
 
 .overlay-controls button:hover,
@@ -96,23 +97,30 @@ body {
   display: grid;
   min-width: 0;
   flex: 1;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: var(--overlay-user-columns);
   align-items: end;
-  gap: 18px;
+  gap: calc(18px * var(--overlay-font-scale));
 }
 
 .overlay-user {
   display: grid;
+  width: 100%;
   min-width: 0;
-  gap: 5px;
-  justify-items: start;
+  gap: calc(5px * var(--overlay-font-scale));
+  justify-items: center;
+  text-align: center;
 }
 
 .overlay-user-bpm {
+  display: block;
+  width: 100%;
   color: var(--overlay-accent);
-  font-size: 18px;
+  font-size: calc(38px * var(--overlay-font-scale));
+  font-weight: 800;
   line-height: 1;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-shadow: 0 2px 16px color-mix(in srgb, var(--overlay-accent) 38%, transparent);
   font-variant-numeric: tabular-nums;
 }
 
@@ -121,12 +129,15 @@ body {
 }
 
 .overlay-user-name {
+  width: 100%;
   max-width: 100%;
   overflow: hidden;
   color: var(--overlay-text);
-  font-size: 16px;
+  font-size: calc(13px * var(--overlay-font-scale));
   font-weight: 650;
+  line-height: 1.25;
   letter-spacing: 0.02em;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -171,14 +182,14 @@ body.zone-danger .overlay-user.active .overlay-user-bpm {
   }
 
   .overlay-users {
-    gap: 10px;
+    gap: calc(12px * var(--overlay-font-scale));
   }
 
   .overlay-user-bpm {
-    font-size: 15px;
+    font-size: calc(32px * var(--overlay-font-scale));
   }
 
   .overlay-user-name {
-    font-size: 12px;
+    font-size: calc(12px * var(--overlay-font-scale));
   }
 }
